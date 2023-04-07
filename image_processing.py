@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import matplotlib.font_manager as fm
+from datetime import datetime
 
 # 将 face_cascade 定义为全局变量
 face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
@@ -17,10 +18,32 @@ def detect_face(image):
 
     return faces[0]
 
-def crop_face(image, face_center, face_radius):
-    mask = np.zeros_like(image)
-    cv2.circle(mask, face_center, face_radius, (255, 255, 255), -1)
-    return cv2.bitwise_and(image, mask)
+def crop_face(image, face_center, max_distance):
+    height, width, channels = image.shape
+    
+    if channels == 3:
+        # 将输入图像转换为具有透明通道的 4 通道图像
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)
+
+    # 创建一个透明底的正方形
+    square_size = 2 * max_distance
+    square = np.zeros((square_size, square_size, 4), dtype=np.uint8)
+
+    # 遍历图片所有像素
+    circle_radius_sq = max_distance**2
+    for y in range(height):
+        for x in range(width):
+            dx = x - face_center[0]
+            dy = y - face_center[1]
+            # 如果像素在圆内，则复制到透明正方形中的对应位置
+            if dx**2 + dy**2 <= circle_radius_sq:
+                square_y = max_distance - face_center[1] + y
+                square_x = max_distance - face_center[0] + x
+                # 检查索引是否在正方形边界内
+                if 0 <= square_y < square_size and 0 <= square_x < square_size:
+                    square[square_y, square_x] = image[y, x]
+
+    return square
 
 def rotate_text(image, text, angle):
     arial_font_path = fm.findfont(fm.FontProperties(family='Arial'))
@@ -57,13 +80,13 @@ def process_all_images(input_folder, output_folder):
             continue
         
         face_center = (face[0] + face[2] // 2, face[1] + face[3] // 2)
-        face_radius = min(face[2], face[3]) // 2
-        cropped_face = crop_face(image, face_center, face_radius)
+        max_distance = min(face_center[0], face_center[1], image.shape[1] - face_center[0], image.shape[0] - face_center[1])
+        cropped_face = crop_face(image, face_center, max_distance)
         
         name = os.path.splitext(image_name)[0]
         named_image = add_name_to_image(cropped_face, name)
 
-        output_path = os.path.join(output_folder, f"{name}头像.jpg")
+        output_path = os.path.join(output_folder, f"{name}头像.png")
         cv2.imwrite(output_path, named_image)
 
     # 调用 remove_deleted_images 函数删除已删除图片的头像
@@ -76,3 +99,48 @@ def remove_deleted_images(input_folder, output_folder):
     for name in output_images - input_images:
         output_image_path = os.path.join(output_folder, f"{name}头像.jpg")
         os.remove(output_image_path)
+
+def generate_schedule_image(self, schedule_data):
+        # 读取背景图片（正方形），店名+Logo 图片和二维码图片
+        bg_image = Image.open("background.jpg")
+        store_logo = Image.open("store_logo.jpg")
+        qr_code = Image.open("qr_code.png")
+        
+        # 创建 ImageDraw 对象，用于在背景图片上绘制文本和其他元素
+        draw = ImageDraw.Draw(bg_image)
+        
+        # 设置字体和颜色
+        font = ImageFont.truetype("arial.ttf", 24)
+        font_color = (0, 0, 0)  # 黑色
+        
+        # 在图片上添加店名+Logo 图片（水平居中）
+        logo_width, logo_height = store_logo.size
+        bg_width, bg_height = bg_image.size
+        logo_position = ((bg_width - logo_width) // 2, 10)
+        bg_image.paste(store_logo, logo_position)
+        
+        # 在图片上添加每天的排班信息
+        y_offset = logo_height + 20
+        for day, employees in schedule_data.items():
+            day_text = f"{day}:"
+            text_width, text_height = draw.textsize(day_text, font)
+            draw.text(((bg_width - text_width) // 2, y_offset), day_text, font=font, fill=font_color)
+            
+            # 在这里添加绘制员工头像的代码
+            # ...
+            
+            y_offset += text_height + 10
+        
+        # 添加联系方式和地址
+        contact_info = "联系方式：************，地址：************"
+        text_width, text_height = draw.textsize(contact_info, font)
+        draw.text(((bg_width - text_width) // 2, y_offset), contact_info, font=font, fill=font_color)
+        
+        # 在图片左下角添加二维码
+        qr_width, qr_height = qr_code.size
+        qr_position = (10, bg_height - qr_height - 10)
+        bg_image.paste(qr_code, qr_position)
+        
+        # 保存排班表图片
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        bg_image.save(f"{timestamp}.jpg")

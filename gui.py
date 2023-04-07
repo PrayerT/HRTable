@@ -1,5 +1,5 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
-from image_processing import process_all_images, remove_deleted_images
+from image_processing import process_all_images, remove_deleted_images, generate_schedule_image
 from database import register_user, login_user, update_schedule, get_schedule, init_database
 from PyQt5.QtWidgets import QVBoxLayout
 import os
@@ -175,7 +175,14 @@ class ScheduleWindow(QtWidgets.QWidget):
         tab.setLayout(layout)
         
         return tab
-
+    
+    def get_selected_employees(self):
+        selected_employees = {}
+        for i, tab in enumerate(self.tabs):
+            checkboxes = self.get_employee_checkboxes(tab)
+            selected = [checkbox.text() for checkbox in checkboxes if checkbox.isChecked()]
+            selected_employees[self.week_days[i]] = selected
+        return selected_employees
 
 class GenerateScheduleWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -202,6 +209,17 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         self.status_label.setText('排班表生成完毕')
         self.ok_button.show()
 
+    def generate_schedule_image(self, schedule_data):
+        image_path = generate_schedule_image(schedule_data)
+        # 将生成的排班表图片保存在程序根目录下，命名为当前时间戳
+        timestamp = str(int(time.time()))
+        output_path = f"{timestamp}.png"
+        image_path.save(output_path)
+        # 调用generation_finished方法，更新状态并显示ok_button
+        self.generation_finished()
+
+    def setImage(self, image_path):
+        self.image_path = image_path
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -221,18 +239,22 @@ class MainWindow(QtWidgets.QMainWindow):
         # 创建 ScheduleWindow 并传递员工列表
         self.schedule_window = ScheduleWindow(self.employees)
 
+        self.generate_schedule_window = GenerateScheduleWindow()
+
         # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
         self.stack.addWidget(self.register_window)
         self.stack.addWidget(self.schedule_window)
+        self.stack.addWidget(self.generate_schedule_window)
 
         # 设置堆栈窗口部件为中心部件
         self.setCentralWidget(self.stack)
 
         # 连接信号和槽
-        self.login_window.login_success.connect(self.show_generate_schedule_window)
+        self.login_window.login_success.connect(self.show_schedule_window)
         self.login_window.register_button.clicked.connect(self.show_register_window)
         self.register_window.back_button.clicked.connect(self.show_login_window)
+        self.schedule_window.wait_button.clicked.connect(self.show_generate_schedule_window)
 
 
     def show_login_window(self):
@@ -241,8 +263,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_register_window(self):
         self.stack.setCurrentIndex(1)
 
-    def show_generate_schedule_window(self):
+    def show_schedule_window(self):
         self.stack.setCurrentIndex(2)
+
+    def show_generate_schedule_window(self):
+        self.stack.setCurrentIndex(3)
+        # 获取选定的员工数据
+        selected_employees = self.schedule_window.get_selected_employees()
+        
+        # 调用 generate_schedule_image 方法并传入选定的员工数据
+        image_path = self.generate_schedule_window.generate_schedule_image(selected_employees)
+
+        # 在 ScheduleWindow 上去掉显示等待中，显示已完成
+        self.generate_schedule_window.generation_finished()
 
     def delete_images(self):
         # Call the remove_deleted_images function here
