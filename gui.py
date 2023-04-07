@@ -1,6 +1,8 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
-from image_processing import process_employee_images
-from database import register_user, login_user, save_schedule, load_schedule
+from image_processing import process_all_images, remove_deleted_images
+from database import register_user, login_user, update_schedule, get_schedule, init_database
+from PyQt5.QtWidgets import QVBoxLayout
+import os
 
 class LoginWindow(QtWidgets.QWidget):
     login_success = QtCore.pyqtSignal()
@@ -37,7 +39,8 @@ class LoginWindow(QtWidgets.QWidget):
     def login(self):
         username = self.username_input.text()
         password = self.password_input.text()
-
+        login_result = login_user(username, password)
+        print(f"Login result: {login_result}")  # 添加这一行进行调试
         if login_user(username, password):
             self.login_success.emit()
         else:
@@ -50,6 +53,7 @@ class LoginWindow(QtWidgets.QWidget):
 class RegisterWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
+        process_all_images("./照片","./头像")
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
@@ -101,8 +105,9 @@ class RegisterWindow(QtWidgets.QWidget):
         self.parent().setCurrentIndex(0)
 
 class ScheduleWindow(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, employees):
         super().__init__()
+        self.employees = employees
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
@@ -111,46 +116,59 @@ class ScheduleWindow(QtWidgets.QWidget):
         self.tab_widget = QtWidgets.QTabWidget()
 
         self.tabs = []
+        employee_chunks = [self.employees[i:i + 10] for i in range(0, len(self.employees), 10)]
         for i in range(7):
-            tab = QtWidgets.QWidget()
-            tab_layout = QtWidgets.QVBoxLayout()
-
-            # 在此处创建员工复选框并添加到tab_layout中
-
-            # 创建反选、全选和清空按钮
-            btn_layout = QtWidgets.QHBoxLayout()
-            btn_select_inverse = QtWidgets.QPushButton('反选')
-            btn_select_inverse.clicked.connect(self.select_inverse)
-            btn_select_all = QtWidgets.QPushButton('全选')
-            btn_select_all.clicked.connect(self.select_all)
-            btn_clear = QtWidgets.QPushButton('清空')
-            btn_clear.clicked.connect(self.clear_selection)
-
-            btn_layout.addWidget(btn_select_inverse)
-            btn_layout.addWidget(btn_select_all)
-            btn_layout.addWidget(btn_clear)
-
-            tab_layout.addLayout(btn_layout)
-            tab.setLayout(tab_layout)
+            tab = self.create_employee_tab(employee_chunks[i % len(employee_chunks)])
+            self.tabs.append(tab)
             self.tab_widget.addTab(tab, self.week_days[i])
 
         layout.addWidget(self.tab_widget)
         self.setLayout(layout)
 
+    def get_current_employee_checkboxes(self):
+        current_tab_index = self.tab_widget.currentIndex()
+        if current_tab_index < 0 or current_tab_index >= len(self.tabs):
+            return []
+        current_tab = self.tabs[current_tab_index]
+        layout = current_tab.layout()
+        employee_checkboxes = [layout.itemAt(i).widget() for i in range(layout.count()) if isinstance(layout.itemAt(i).widget(), QtWidgets.QCheckBox)]
+        return employee_checkboxes
+
+    
     def select_inverse(self):
         # 实现反选功能
-        for employee_checkbox in self.employee_checkboxes:
+        employee_checkboxes = self.get_current_employee_checkboxes()
+        for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(not employee_checkbox.isChecked())
 
     def select_all(self):
         # 实现全选功能
-        for employee_checkbox in self.employee_checkboxes:
+        employee_checkboxes = self.get_current_employee_checkboxes()
+        for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(True)
 
     def clear_selection(self):
         # 实现清空功能
-        for employee_checkbox in self.employee_checkboxes:
+        employee_checkboxes = self.get_current_employee_checkboxes()
+        for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(False)
+
+    def create_employee_tab(self, employees):
+        # 创建一个新的选项卡
+        tab = QtWidgets.QWidget()
+        
+        # 为选项卡创建一个 QVBoxLayout
+        layout = QVBoxLayout()
+        
+        # 将员工复选框添加到布局中
+        for employee in employees:
+            checkbox = QtWidgets.QCheckBox(employee)
+            layout.addWidget(checkbox)
+        
+        # 将布局添加到选项卡中
+        tab.setLayout(layout)
+        
+        return tab
 
 
 class GenerateScheduleWindow(QtWidgets.QWidget):
@@ -183,30 +201,33 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle('排班表生成器')
-
-        # 创建一个堆叠窗口小部件并将其设置为中心窗口小部件
+# 创建堆栈窗口部件
         self.stack = QtWidgets.QStackedWidget()
-        self.setCentralWidget(self.stack)
 
-        # 创建子窗口并将其添加到堆叠窗口小部件中
+        # 创建登录、注册和排班窗口
         self.login_window = LoginWindow()
         self.register_window = RegisterWindow()
-        self.schedule_window = ScheduleWindow()
-        self.generate_schedule_window = GenerateScheduleWindow()
 
+        avatars_folder = "./照片"
+        image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp"}
+        self.employees = [os.path.splitext(filename)[0] for filename in os.listdir(avatars_folder) if os.path.splitext(filename)[1].lower() in image_extensions]
+
+        # 创建 ScheduleWindow 并传递员工列表
+        self.schedule_window = ScheduleWindow(self.employees)
+
+        # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
         self.stack.addWidget(self.register_window)
         self.stack.addWidget(self.schedule_window)
-        self.stack.addWidget(self.generate_schedule_window)
 
-        # 连接子窗口的信号和槽
-        self.login_window.login_success.connect(self.show_schedule_window)
+        # 设置堆栈窗口部件为中心部件
+        self.setCentralWidget(self.stack)
+
+        # 连接信号和槽
+        self.login_window.login_success.connect(self.show_generate_schedule_window)
         self.login_window.register_button.clicked.connect(self.show_register_window)
         self.register_window.back_button.clicked.connect(self.show_login_window)
 
-    def show_schedule_window(self):
-        self.stack.setCurrentIndex(2)
 
     def show_login_window(self):
         self.stack.setCurrentIndex(0)
@@ -215,8 +236,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stack.setCurrentIndex(1)
 
     def show_generate_schedule_window(self):
-        self.stack.setCurrentIndex(3)
+        self.stack.setCurrentIndex(2)
 
+    def delete_images(self):
+        # Call the remove_deleted_images function here
+        input_folder = "./照片"
+        output_folder = "./头像"
+        remove_deleted_images(input_folder, output_folder)
+
+    def save_schedule(self):
+        # Call the update_schedule function here to save the schedule to the database
+        user_id = 1  # Assuming the user_id is 1, replace it with the actual user_id after implementing user login
+        for week_day in range(1, 8):
+            # Assuming employee_checkboxes is a list of lists containing the employee checkboxes for each week day
+            selected_employees = [employee for employee in self.schedule_window.employee_checkboxes[week_day - 1] if employee.isChecked()]
+            update_schedule(user_id, week_day, selected_employees)
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication([])
