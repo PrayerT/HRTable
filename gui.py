@@ -123,6 +123,12 @@ class ScheduleWindow(QtWidgets.QWidget):
             self.tab_widget.addTab(tab, self.week_days[i])
 
         layout.addWidget(self.tab_widget)
+
+        button_layout = QtWidgets.QHBoxLayout()
+        self.wait_button = QtWidgets.QPushButton('等待生成')
+        button_layout.addWidget(self.wait_button)
+        layout.addLayout(button_layout)
+        
         self.setLayout(layout)
 
     def get_current_employee_checkboxes(self):
