@@ -3,6 +3,7 @@ from image_processing import process_all_images, remove_deleted_images, generate
 from database import register_user, login_user, update_schedule, get_schedule, init_database
 from PyQt5.QtWidgets import QVBoxLayout
 import os
+import time
 
 class LoginWindow(QtWidgets.QWidget):
     login_success = QtCore.pyqtSignal()
@@ -131,31 +132,28 @@ class ScheduleWindow(QtWidgets.QWidget):
         
         self.setLayout(layout)
 
-    def get_current_employee_checkboxes(self):
+    def get_active_tab_employee_checkboxes(self):
         current_tab_index = self.tab_widget.currentIndex()
         if current_tab_index < 0 or current_tab_index >= len(self.tabs):
             return []
         current_tab = self.tabs[current_tab_index]
-        layout = current_tab.layout()
-        employee_checkboxes = [layout.itemAt(i).widget() for i in range(layout.count()) if isinstance(layout.itemAt(i).widget(), QtWidgets.QCheckBox)]
-        return employee_checkboxes
-
+        return self.get_current_employee_checkboxes(current_tab)
     
     def select_inverse(self):
         # 实现反选功能
-        employee_checkboxes = self.get_current_employee_checkboxes()
+        employee_checkboxes = self.get_active_tab_employee_checkboxes()
         for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(not employee_checkbox.isChecked())
 
     def select_all(self):
         # 实现全选功能
-        employee_checkboxes = self.get_current_employee_checkboxes()
+        employee_checkboxes = self.get_active_tab_employee_checkboxes()
         for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(True)
 
     def clear_selection(self):
         # 实现清空功能
-        employee_checkboxes = self.get_current_employee_checkboxes()
+        employee_checkboxes = self.get_active_tab_employee_checkboxes()
         for employee_checkbox in employee_checkboxes:
             employee_checkbox.setChecked(False)
 
@@ -176,13 +174,19 @@ class ScheduleWindow(QtWidgets.QWidget):
         
         return tab
     
+    def get_current_employee_checkboxes(self, tab):
+        layout = tab.layout()
+        employee_checkboxes = [layout.itemAt(i).widget() for i in range(layout.count()) if isinstance(layout.itemAt(i).widget(), QtWidgets.QCheckBox)]
+        return employee_checkboxes
+    
     def get_selected_employees(self):
         selected_employees = {}
         for i, tab in enumerate(self.tabs):
-            checkboxes = self.get_employee_checkboxes(tab)
+            checkboxes = self.get_current_employee_checkboxes(tab)
             selected = [checkbox.text() for checkbox in checkboxes if checkbox.isChecked()]
             selected_employees[self.week_days[i]] = selected
         return selected_employees
+
 
 class GenerateScheduleWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -210,11 +214,14 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         self.ok_button.show()
 
     def generate_schedule_image(self, schedule_data):
-        image_path = generate_schedule_image(schedule_data)
+        # 调用 generate_schedule_image 函数并传入排班数据
+        schedule_image = generate_schedule_image(schedule_data)
+
         # 将生成的排班表图片保存在程序根目录下，命名为当前时间戳
         timestamp = str(int(time.time()))
         output_path = f"{timestamp}.png"
-        image_path.save(output_path)
+        schedule_image.save(output_path)
+
         # 调用generation_finished方法，更新状态并显示ok_button
         self.generation_finished()
 
@@ -270,7 +277,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stack.setCurrentIndex(3)
         # 获取选定的员工数据
         selected_employees = self.schedule_window.get_selected_employees()
-        
+
         # 调用 generate_schedule_image 方法并传入选定的员工数据
         image_path = self.generate_schedule_window.generate_schedule_image(selected_employees)
 
