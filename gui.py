@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
 from image_processing import process_all_images, remove_deleted_images, generate_schedule_image
 from database import register_user, login_user, update_schedule, get_schedule, init_database
-from PyQt5.QtWidgets import QVBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
 import time
 
@@ -126,11 +126,22 @@ class ScheduleWindow(QtWidgets.QWidget):
         layout.addWidget(self.tab_widget)
 
         button_layout = QtWidgets.QHBoxLayout()
+        self.select_all_button = QtWidgets.QPushButton('全选')
+        self.select_inverse_button = QtWidgets.QPushButton('反选')
+        self.clear_selection_button = QtWidgets.QPushButton('清空')
         self.wait_button = QtWidgets.QPushButton('等待生成')
+        button_layout.addWidget(self.select_all_button)
+        button_layout.addWidget(self.select_inverse_button)
+        button_layout.addWidget(self.clear_selection_button)
         button_layout.addWidget(self.wait_button)
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
+
+        # 连接信号和槽
+        self.select_all_button.clicked.connect(self.select_all)
+        self.select_inverse_button.clicked.connect(self.select_inverse)
+        self.clear_selection_button.clicked.connect(self.clear_selection)
 
     def get_active_tab_employee_checkboxes(self):
         current_tab_index = self.tab_widget.currentIndex()
@@ -184,7 +195,9 @@ class ScheduleWindow(QtWidgets.QWidget):
         for i, tab in enumerate(self.tabs):
             checkboxes = self.get_current_employee_checkboxes(tab)
             selected = [checkbox.text() for checkbox in checkboxes if checkbox.isChecked()]
+            print(f"Selected employees on {self.week_days[i]}: {selected}")  # 添加 log 输出
             selected_employees[self.week_days[i]] = selected
+        print(f"Selected employees: {selected_employees}")  # 添加 log 输出
         return selected_employees
 
 
@@ -275,7 +288,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_generate_schedule_window(self):
         self.stack.setCurrentIndex(3)
-        # 获取选定的员工数据
+        # 获取当前选定的员工数据
         selected_employees = self.schedule_window.get_selected_employees()
 
         # 调用 generate_schedule_image 方法并传入选定的员工数据
