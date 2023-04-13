@@ -118,6 +118,7 @@ class ScheduleWindow(QtWidgets.QWidget):
 
         self.tabs = []
         employee_chunks = [self.employees[i:i + 10] for i in range(0, len(self.employees), 10)]
+        self.employee_checkboxes = {}  # 初始化 employee_checkboxes 字典
         for i in range(7):
             tab = self.create_employee_tab(employee_chunks[i % len(employee_chunks)])
             self.tabs.append(tab)
@@ -185,6 +186,14 @@ class ScheduleWindow(QtWidgets.QWidget):
         
         return tab
     
+    def load_schedule(self, schedule_data):
+        print(f"Loading schedule data: {schedule_data}")
+        for i, tab in enumerate(self.tabs):
+            employee_checkboxes = self.get_current_employee_checkboxes(tab)
+            for checkbox in employee_checkboxes:
+                if checkbox.text() in schedule_data[self.week_days[i]]:
+                    checkbox.setChecked(True)
+    
     def get_current_employee_checkboxes(self, tab):
         layout = tab.layout()
         employee_checkboxes = [layout.itemAt(i).widget() for i in range(layout.count()) if isinstance(layout.itemAt(i).widget(), QtWidgets.QCheckBox)]
@@ -199,6 +208,14 @@ class ScheduleWindow(QtWidgets.QWidget):
             selected_employees[self.week_days[i]] = selected
         print(f"Selected employees: {selected_employees}")  # 添加 log 输出
         return selected_employees
+    
+    def get_employee_checkboxes_for_week_day(self, week_day):
+        # Get the employee checkboxes for a specific week_day
+        if 1 <= week_day <= len(self.tabs):
+            tab = self.tabs[week_day - 1]
+            return self.get_current_employee_checkboxes(tab)
+        return []
+
 
 
 class GenerateScheduleWindow(QtWidgets.QWidget):
@@ -245,12 +262,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-# 创建堆栈窗口部件
+        # 创建堆栈窗口部件
         self.stack = QtWidgets.QStackedWidget()
 
         # 创建登录、注册和排班窗口
         self.login_window = LoginWindow()
         self.register_window = RegisterWindow()
+        self.week_days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+
 
         avatars_folder = "./照片"
         image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp"}
@@ -258,6 +277,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 创建 ScheduleWindow 并传递员工列表
         self.schedule_window = ScheduleWindow(self.employees)
+        self.show_schedule_window()
 
         self.generate_schedule_window = GenerateScheduleWindow()
 
@@ -283,13 +303,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_register_window(self):
         self.stack.setCurrentIndex(1)
 
-    def show_schedule_window(self):
+    def show_schedule_window(self, load_schedule=True):
+        if load_schedule:
+            user_id = 1  # Assuming the user_id is 1, replace it with the actual user_id after implementing user login
+            schedule_data = {self.week_days[week_day - 1]: get_schedule(user_id, week_day) for week_day in range(1, 8)}
+            self.schedule_window.load_schedule(schedule_data)
         self.stack.setCurrentIndex(2)
 
     def show_generate_schedule_window(self):
         self.stack.setCurrentIndex(3)
         # 获取当前选定的员工数据
         selected_employees = self.schedule_window.get_selected_employees()
+        self.save_schedule()
 
         # 调用 generate_schedule_image 方法并传入选定的员工数据
         image_path = self.generate_schedule_window.generate_schedule_image(selected_employees)
@@ -307,8 +332,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Call the update_schedule function here to save the schedule to the database
         user_id = 1  # Assuming the user_id is 1, replace it with the actual user_id after implementing user login
         for week_day in range(1, 8):
-            # Assuming employee_checkboxes is a list of lists containing the employee checkboxes for each week day
-            selected_employees = [employee for employee in self.schedule_window.employee_checkboxes[week_day - 1] if employee.isChecked()]
+            # Get employee checkboxes for each week day
+            employee_checkboxes = self.schedule_window.get_employee_checkboxes_for_week_day(week_day)
+            selected_employees = [employee.text() for employee in employee_checkboxes if employee.isChecked()]
             update_schedule(user_id, week_day, selected_employees)
 
 if __name__ == '__main__':

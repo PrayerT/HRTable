@@ -64,6 +64,7 @@ def update_schedule(user_id, week_day, employees):
 
     for employee_name in employees:
         cursor.execute("INSERT INTO schedule (user_id, week_day, employee_name) VALUES (?, ?, ?)", (user_id, week_day, employee_name))
+        print(f"Saving employee {employee_name} for user {user_id} on week_day {week_day}")  # 添加 log 输出
 
     conn.commit()
     conn.close()
