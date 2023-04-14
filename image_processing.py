@@ -18,7 +18,7 @@ def detect_face(image):
 
     return faces[0]
 
-def crop_face(image, face_center, max_distance):
+def crop_face(image, face_center, max_distance, image_name):
     height, width, channels = image.shape
     
     if channels == 3:
@@ -43,6 +43,11 @@ def crop_face(image, face_center, max_distance):
                 # 检查索引是否在正方形边界内
                 if 0 <= square_y < square_size and 0 <= square_x < square_size:
                     square[square_y, square_x] = image[y, x]
+
+       
+    image_name, extension = os.path.splitext(image_name)
+    save_path = os.path.join("原头像", f"{image_name}原头像.png")
+    cv2.imwrite(save_path, square)
 
     return square
 
@@ -83,7 +88,12 @@ def add_name_to_image(image, name):
     cv2.putText(rotated_text, name, text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
     return rotated_text
 
-def process_all_images(input_folder, output_folder):
+def process_all_images(input_folder, output_folder, output_folder_raw):
+    if not os.path.exists('头像'):
+        os.mkdir('头像')
+
+    if not os.path.exists('原头像'):
+        os.mkdir('原头像') 
     # 在这里实现批量处理图片功能
     for image_name in os.listdir(input_folder):
         image_path = os.path.join(input_folder, image_name)
@@ -100,7 +110,7 @@ def process_all_images(input_folder, output_folder):
         
         face_center = (face[0] + face[2] // 2, face[1] + face[3] // 2)
         max_distance = min(face_center[0], face_center[1], image.shape[1] - face_center[0], image.shape[0] - face_center[1])
-        cropped_face = crop_face(image, face_center, max_distance)
+        cropped_face = crop_face(image, face_center, max_distance, image_name)
         
         name = os.path.splitext(image_name)[0]
         named_image = add_name_to_image(cropped_face, name)
@@ -109,14 +119,18 @@ def process_all_images(input_folder, output_folder):
         cv2.imwrite(output_path, named_image)
 
     # 调用 remove_deleted_images 函数删除已删除图片的头像
-    remove_deleted_images(input_folder, output_folder)
+    remove_deleted_images(input_folder, output_folder, output_folder_raw)
 
-def remove_deleted_images(input_folder, output_folder):
+def remove_deleted_images(input_folder, output_folder, output_folder_raw):
     input_images = {os.path.splitext(image_name)[0] for image_name in os.listdir(input_folder)}
     output_images = {os.path.splitext(image_name)[0].rstrip('头像') for image_name in os.listdir(output_folder)}
+    output_images_raw = {os.path.splitext(image_name)[0].rstrip('原头像') for image_name in os.listdir(output_folder_raw)}
 
     for name in output_images - input_images:
-        output_image_path = os.path.join(output_folder, f"{name}头像.jpg")
+        output_image_path = os.path.join(output_folder, f"{name}头像.png")
+        os.remove(output_image_path)
+    for name in output_images_raw - input_images:
+        output_image_path = os.path.join(output_folder, f"{name}原头像.png")
         os.remove(output_image_path)
 
 def create_employee_rectangle(employees, avatar_size=100, avatar_padding=10, max_width=800):

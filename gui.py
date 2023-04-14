@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
 from image_processing import process_all_images, remove_deleted_images, generate_schedule_image
-from database import register_user, login_user, update_schedule, get_schedule, init_database
+from database import register_user, login_user, update_schedule, get_schedule, isRegistered
 from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
 import time
@@ -28,7 +28,8 @@ class LoginWindow(QtWidgets.QWidget):
         layout.addWidget(self.password_label)
         layout.addWidget(self.password_input)
         layout.addWidget(self.login_button)
-        layout.addWidget(self.register_button)
+        if not isRegistered:
+            layout.addWidget(self.register_button)
 
         # 设置布局
         self.setLayout(layout)
@@ -54,7 +55,7 @@ class LoginWindow(QtWidgets.QWidget):
 class RegisterWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        process_all_images("./照片","./头像")
+        process_all_images("./照片","./头像","./原头像")
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
@@ -321,12 +322,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 在 ScheduleWindow 上去掉显示等待中，显示已完成
         self.generate_schedule_window.generation_finished()
-
-    def delete_images(self):
-        # Call the remove_deleted_images function here
-        input_folder = "./照片"
-        output_folder = "./头像"
-        remove_deleted_images(input_folder, output_folder)
 
     def save_schedule(self):
         # Call the update_schedule function here to save the schedule to the database

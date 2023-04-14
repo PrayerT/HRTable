@@ -80,5 +80,17 @@ def get_schedule(user_id, week_day):
 
     return [row[0] for row in result]
 
+def isRegistered():
+    conn = connect_database()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    result = cursor.fetchone()
+    user_count = result[0]
+
+    conn.close()
+
+    return user_count > 0
+
 if __name__ == '__main__':
     init_database()

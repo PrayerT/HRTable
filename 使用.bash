@@ -21,6 +21,14 @@ if errorlevel 1 (
     echo 所需库已安装
 )
 
+echo 检查“照片”文件夹是否存在...
+if not exist "照片" (
+    echo 正在创建“照片”文件夹...
+    mkdir "照片"
+) else (
+    echo “照片”文件夹已存在
+)
+
 echo 安装完成，正在运行 gui.py
-python gui.py
+python3 gui.py
 exit
