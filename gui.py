@@ -1,9 +1,11 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
 from image_processing import process_all_images, remove_deleted_images, generate_schedule_image
-from database import register_user, login_user, update_schedule, get_schedule, isRegistered
+from database import init_database, register_user, login_user, update_schedule, get_schedule, isRegistered
 from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
 import time
+from datetime import datetime
+from PyQt5.QtCore import QThread, pyqtSignal
 
 class LoginWindow(QtWidgets.QWidget):
     login_success = QtCore.pyqtSignal()
@@ -37,6 +39,7 @@ class LoginWindow(QtWidgets.QWidget):
         # 连接信号和槽
         self.login_button.clicked.connect(self.login)
         self.register_button.clicked.connect(self.register)
+        self.password_input.returnPressed.connect(self.login)
 
     def login(self):
         username = self.username_input.text()
@@ -118,7 +121,7 @@ class ScheduleWindow(QtWidgets.QWidget):
         self.tab_widget = QtWidgets.QTabWidget()
 
         self.tabs = []
-        employee_chunks = [self.employees[i:i + 10] for i in range(0, len(self.employees), 10)]
+        employee_chunks = [self.employees]
         self.employee_checkboxes = {}  # 初始化 employee_checkboxes 字典
         for i in range(7):
             tab = self.create_employee_tab(employee_chunks[i % len(employee_chunks)])
@@ -248,9 +251,9 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         # 调用 generate_schedule_image 函数并传入排班数据
         schedule_image = generate_schedule_image(schedule_data)
 
-        # 将生成的排班表图片保存在程序根目录下，命名为当前时间戳
-        timestamp = str(int(time.time()))
-        output_path = f"{timestamp}.png"
+        # 将生成的排班表图片保存在程序根目录下，命名为当前时间
+        current_time = datetime.now().strftime('%m月%d日%H时%M分%S秒')
+        output_path = f"排班表/{current_time}.png"
         schedule_image.save(output_path)
 
         # 调用generation_finished方法，更新状态并显示ok_button
@@ -258,6 +261,18 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
 
     def setImage(self, image_path):
         self.image_path = image_path
+
+class GenerateScheduleThread(QThread):
+    generation_finished = pyqtSignal(str)
+
+    def __init__(self, generate_schedule_image, selected_employees):
+        super().__init__()
+        self.generate_schedule_image = generate_schedule_image
+        self.selected_employees = selected_employees
+
+    def run(self):
+        image_path = self.generate_schedule_image(self.selected_employees)
+        self.generation_finished.emit(image_path)
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -317,9 +332,12 @@ class MainWindow(QtWidgets.QMainWindow):
         selected_employees = self.schedule_window.get_selected_employees()
         self.save_schedule()
 
-        # 调用 generate_schedule_image 方法并传入选定的员工数据
-        image_path = self.generate_schedule_window.generate_schedule_image(selected_employees)
+        # 创建新线程用于处理耗时操作
+        self.generate_schedule_thread = GenerateScheduleThread(self.generate_schedule_window.generate_schedule_image, selected_employees)
+        self.generate_schedule_thread.generation_finished.connect(self.on_generation_finished)
+        self.generate_schedule_thread.start()
 
+    def on_generation_finished(self):
         # 在 ScheduleWindow 上去掉显示等待中，显示已完成
         self.generate_schedule_window.generation_finished()
 
@@ -333,6 +351,7 @@ class MainWindow(QtWidgets.QMainWindow):
             update_schedule(user_id, week_day, selected_employees)
 
 if __name__ == '__main__':
+    init_database()
     app = QtWidgets.QApplication([])
     main_window = MainWindow()
     main_window.show()

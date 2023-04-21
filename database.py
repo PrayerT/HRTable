@@ -5,26 +5,32 @@ import hashlib
 DB_FILE = 'schedule.db'
 
 def init_database():
-    if not os.path.exists(DB_FILE):
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+    
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
 
-        # 创建用户表
-        cursor.execute('''CREATE TABLE users
-                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                           username TEXT UNIQUE NOT NULL,
-                           password TEXT NOT NULL);''')
+    # 创建用户表
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL);''')
 
-        # 创建排班表
-        cursor.execute('''CREATE TABLE schedule
-                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                           user_id INTEGER NOT NULL,
-                           week_day INTEGER NOT NULL,
-                           employee_name TEXT NOT NULL,
-                           FOREIGN KEY (user_id) REFERENCES users (id));''')
+    # 创建排班表
+    cursor.execute('''CREATE TABLE IF NOT EXISTS schedule
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    week_day INTEGER NOT NULL,
+                    employee_name TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users (id));''')
 
-        conn.commit()
-        conn.close()
+    # 创建图片处理记录表
+    cursor.execute('''CREATE TABLE IF NOT EXISTS processed_images
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    image_name TEXT UNIQUE NOT NULL,
+                    mtime REAL NOT NULL);''')
+
+    conn.commit()
+    conn.close()
 
 def connect_database():
     return sqlite3.connect(DB_FILE)
@@ -91,6 +97,27 @@ def isRegistered():
     conn.close()
 
     return user_count > 0
+
+def save_image_mtime(image_name, mtime):
+    conn = connect_database()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("INSERT OR REPLACE INTO processed_images (image_name, mtime) VALUES (?, ?)", (image_name, mtime))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_image_mtime(image_name):
+    conn = connect_database()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT mtime FROM processed_images WHERE image_name = ?", (image_name,))
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return result[0] if result else None
 
 if __name__ == '__main__':
     init_database()
