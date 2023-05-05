@@ -33,7 +33,7 @@ def crop_face(image, face_center, max_distance, image_name):
     # 创建一个白色底的正方形
     square_size = 2 * max_distance
     square = np.zeros((square_size, square_size, 4), dtype=np.uint8)
-    square[:] = (255, 255, 255, 255)  # 将整个正方形填充为白色
+    square[:] = (255, 255, 255, 0)  # 将整个正方形填充为白色
 
     # 遍历图片所有像素
     circle_radius_sq = max_distance**2
@@ -215,9 +215,6 @@ def generate_schedule_image(schedule_data):
     qr_code = Image.open("res/qr_code.png")
     cat_pic = Image.open("res/猫娘.png")
 
-    # 应用高斯模糊
-    # bg_image = bg_image.filter(ImageFilter.GaussianBlur(5))
-
     # 设置字体和颜色
     font = ImageFont.truetype(font_path, 40)
     font_flag = ImageFont.truetype(font_path, 40)
@@ -255,9 +252,6 @@ def generate_schedule_image(schedule_data):
 
     # 计算二维码高度
     qr_code_width, qr_code_height = qr_code.size
-    # qr_code_height_scaled = int(bg_height * 0.2)
-    # qr_code_width_scaled = int(qr_code_width * (qr_code_height_scaled / qr_code_height))
-    # qr_code = qr_code.resize((qr_code_width_scaled, qr_code_height_scaled), Image.ANTIALIAS)
     content_height += qr_code_height
     content_height += logo_height_scaled + 10
 
@@ -278,7 +272,6 @@ def generate_schedule_image(schedule_data):
 
     address_width, address_height = draw.textsize(address, font)
     phone_width, phone_height = draw.textsize(phone, font)
-    # content_height += address_height + phone_height + 30  # 加上30像素的间距
 
     y_offset = 20
     # 创建 ImageDraw 对象，用于在背景图片上绘制文本和其他元素
@@ -369,4 +362,129 @@ def paste_random_size_position_logo(bg_image, logo, min_scale, max_scale):
 
     # 在背景图上粘贴Logo
     bg_image.paste(logo, (x_position, y_position), logo)
+
+def generate_rank_image(rank):
+
+    # 读取金银铜奖牌图片
+    gold_img = Image.open(os.path.join("res", "gold.png"))
+    silver_img = Image.open(os.path.join("res", "silver.png"))
+    copper_img = Image.open(os.path.join("res", "copper.png"))
+
+    ranked_avatars = []  # 存储带奖牌的头像图片
+    
+    for i in range(3):
+        # 打开原头像
+        name = rank[i]
+        avatar_path = os.path.join("./原头像", f"{name}原头像.png")
+        avatar_img = Image.open(avatar_path)
+        
+        # 调整头像大小并添加金银铜奖牌
+        avatar_img = avatar_img.resize((800, 800))
+        avatar_img = avatar_img.convert("RGBA")
+
+        # 获取头像图片的像素数据
+        avatar_data = avatar_img.load()
+
+        # 获取头像图片的内切圆半径
+        radius = int(min(avatar_img.width, avatar_img.height) / 2)
+
+        # 循环遍历头像图片的所有像素
+        for x in range(avatar_img.width):
+            for y in range(avatar_img.height):
+                # 如果当前像素在内切圆之外且是白色，则将其转换为透明
+                distance_to_center = ((x - radius) ** 2 + (y - radius) ** 2) ** 0.5
+                if distance_to_center > radius and avatar_data[x, y] == (255, 255, 255, 255):
+                    avatar_data[x, y] = (0, 0, 0, 0)
+
+        # 创建一个与头像图片大小相同的透明底图
+        mask = Image.new("L", avatar_img.size, 0)
+
+        # 在透明底图上绘制一个圆形掩码，以保留头像图片中心的圆形部分
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, radius * 2, radius * 2), fill=255)
+                # 应用掩码，去除头像图片外的部分
+        avatar_img.putalpha(mask)
+
+        if i == 0:
+            avatar_img.paste(gold_img, (600, 600), gold_img)
+        elif i == 1:
+            avatar_img.paste(silver_img, (600, 600), silver_img)
+        elif i == 2:
+            avatar_img.paste(copper_img, (600, 600), copper_img)
+
+        ranked_avatars.append(avatar_img)
+
+    # 创建排名图
+    banner_img = Image.open(os.path.join("res", "banner.png"))
+    cat_img = Image.open(os.path.join("res", "猫娘.png"))
+    store_logo = Image.open(os.path.join("res", "logo.png"))
+
+    # 创建临时的 ImageDraw.Draw 对象以获取文本尺寸
+    temp_img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    temp_draw = ImageDraw.Draw(temp_img)
+
+    font_path = "./res/汉仪喵魂梦境 W.ttf"  # 请提供字体文件路径
+    font_big = ImageFont.truetype(font_path, 1000)
+    font_small = ImageFont.truetype(font_path, 800)
+
+    title1 = "桃酱·二次元·助教·桌游"
+    title2 = "淘气女仆排行榜"
+
+    # 计算标题尺寸
+    title1_size = temp_draw.textsize(title1, font=font_big)
+    title2_size = temp_draw.textsize(title2, font=font_small)
+    # 计算最大文本宽度
+    max_text_width = max(title1_size[0], title2_size[0], 40 * 2 + avatar_img.width + 300)
+    print(max_text_width)
+
+    # 计算底图大小
+    width = max_text_width + 40
+    height = 40 + (len(rank) * 840) + title1_size[1] + title2_size[1]
+
+    # 创建底图
+    final_img = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+
+    num_of_logos = 20  # 更改此值以设置要添加的Logo数量
+    for _ in range(num_of_logos):
+        paste_random_size_position_logo(final_img, store_logo, 0.4, 0.8)
+    # 应用20%的白色遮罩
+    final_img = final_img.convert("RGBA")
+    overlay = Image.new("RGBA", final_img.size, (255, 255, 255, int(255 * 0.4)))
+    final_img = Image.alpha_composite(final_img, overlay)
+
+    # 添加文本
+    draw = ImageDraw.Draw(final_img)
+    ImageDraw.Draw(final_img).text(((width - title1_size[0]) // 2, 20), title1, font=font_big, fill=(225, 115, 160))
+    ImageDraw.Draw(final_img).text(((width - title2_size[0]) // 2, 20 + title1_size[1]), title2, font=font_small, fill=(225, 115, 160))
+
+    # 将Banner贴在左上角
+    final_img.paste(banner_img, (20, 20), banner_img)
+
+    # 添加排名信息
+    for i, name in enumerate(rank):
+        if i < 3:
+            avatar_img = ranked_avatars[i]
+            avatar_height = avatar_img.height
+
+            # 调整字体大小以使文字等高
+            font_size = avatar_height
+            adjusted_font = ImageFont.truetype(font_path, font_size)
+
+            text = f"TOP.{i + 1} {name}"
+            text_size = draw.textsize(text, font=adjusted_font)
+
+            # 将头像粘贴到文字右边
+            text_position = (40, 120 + banner_img.height + (i * 800))
+            draw.text(text_position, text, font=adjusted_font, fill=(225, 115, 160))
+            final_img.paste(avatar_img, (text_position[0] + text_size[0] + 10, text_position[1]), avatar_img)
+        else:
+            break
+
+    # 粘贴猫娘图片
+    cat_position = (width - cat_img.width, height - cat_img.height)
+    final_img.paste(cat_img, cat_position, cat_img)
+
+    # 保存图片
+    final_img.save("ranked_image.png")
+
 

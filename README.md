@@ -1,7 +1,7 @@
 <h1 align="center">一只小桃酱的专属HR工具</h1>
 
 <p align="center">
-	<img src="https://github.com/PrayerT/HRTable/blob/master/logo.png" width="200" height="200" alt="nonebot"></a>
+	<img src="https://github.com/PrayerT/HRTable/blob/master/logo.png" width="200" height="200" alt="桃酱logo"></a>
 </p>
 
 <div align="center">

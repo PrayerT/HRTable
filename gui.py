@@ -1,9 +1,9 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
-from image_processing import process_all_images, remove_deleted_images, generate_schedule_image
+from image_processing import generate_rank_image, process_all_images, remove_deleted_images, generate_schedule_image
 from database import init_database, register_user, login_user, update_schedule, get_schedule, isRegistered
 from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
-import time
+import openpyxl
 from datetime import datetime
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -42,8 +42,12 @@ class LoginWindow(QtWidgets.QWidget):
         self.password_input.returnPressed.connect(self.login)
 
     def login(self):
+        DEBUG = True
         username = self.username_input.text()
         password = self.password_input.text()
+        if DEBUG:
+            self.login_success.emit()
+            return
         login_result = login_user(username, password)
         print(f"Login result: {login_result}")  # 添加这一行进行调试
         if login_user(username, password):
@@ -108,6 +112,85 @@ class RegisterWindow(QtWidgets.QWidget):
 
     def back(self):
         self.parent().setCurrentIndex(0)
+
+class FunctionSelectionWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QtWidgets.QVBoxLayout()
+
+        self.schedule_button = QtWidgets.QPushButton("排班表生成")
+        self.ranking_button = QtWidgets.QPushButton("排名表生成")
+
+        layout.addWidget(self.schedule_button)
+        layout.addWidget(self.ranking_button)
+
+        self.setLayout(layout)
+
+class RankingWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QtWidgets.QVBoxLayout()
+
+        self.status_label = QtWidgets.QLabel('正在生成排名表...')
+        self.ok_button = QtWidgets.QPushButton('确定')
+        self.ok_button.hide()
+
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.ok_button)
+
+        self.setLayout(layout)
+
+        self.ok_button.clicked.connect(QtWidgets.qApp.quit)
+
+    def generate_ranking(self):
+        try:
+            # 指定表格文件夹路径
+            folder_path = '表格'
+
+            # 获取表格文件夹下所有文件的文件名（包含后缀）
+            file_names = os.listdir(folder_path)
+
+            # 过滤出所有以 .xlsx 结尾的文件名，并将它们按照修改时间排序
+            xlsx_files = [f for f in file_names if f.endswith('.xlsx')]
+            xlsx_files.sort(key=lambda f: os.path.getmtime(os.path.join(folder_path, f)), reverse=True)
+
+            if not xlsx_files:
+                self.status_label.setText("表格文件夹下不存在任何表格文件！")
+                return
+
+            # 打开 Excel 文件
+            workbook = openpyxl.load_workbook(os.path.join(folder_path, xlsx_files[0]))
+
+            # 选择工作表
+            worksheet = workbook.active
+            data = []
+            for row in worksheet.iter_rows(min_row=3, max_col=3):
+                employee_name = row[0].value
+                if employee_name is None:
+                    continue
+                quantity = row[1].value
+                total_price = row[2].value
+                data.append((employee_name, quantity, total_price))
+                print(employee_name, quantity, total_price)
+
+            # 按总价降序排序
+            data.sort(key=lambda x: x[2], reverse=True)
+
+            rank = [x[0] for x in data[:10]]
+            print(rank)
+
+            #TODO: 生成排名表
+            generate_rank_image(rank)
+            # 在这里添加将头像合成排名表的代码
+
+            self.status_label.setText("排名表生成完毕")
+            self.ok_button.show()
+
+        except Exception as e:
+            self.status_label.setText(f"生成排名表时出现错误：{str(e)}")
+            print(f"生成排名表时出现错误：{str(e)}")
 
 class ScheduleWindow(QtWidgets.QWidget):
     def __init__(self, employees):
@@ -296,21 +379,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_schedule_window()
 
         self.generate_schedule_window = GenerateScheduleWindow()
+        self.function_selection_window = FunctionSelectionWindow()
+        self.ranking_window = RankingWindow()
 
         # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
         self.stack.addWidget(self.register_window)
         self.stack.addWidget(self.schedule_window)
         self.stack.addWidget(self.generate_schedule_window)
+        self.stack.addWidget(self.function_selection_window)
+        self.stack.addWidget(self.ranking_window)
 
         # 设置堆栈窗口部件为中心部件
         self.setCentralWidget(self.stack)
 
         # 连接信号和槽
-        self.login_window.login_success.connect(self.show_schedule_window)
+        self.login_window.login_success.connect(self.show_function_selection_window)
         self.login_window.register_button.clicked.connect(self.show_register_window)
         self.register_window.back_button.clicked.connect(self.show_login_window)
         self.schedule_window.wait_button.clicked.connect(self.show_generate_schedule_window)
+        self.function_selection_window.schedule_button.clicked.connect(self.show_schedule_window)
+        self.function_selection_window.ranking_button.clicked.connect(self.show_ranking_window)
 
 
     def show_login_window(self):
@@ -336,6 +425,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.generate_schedule_thread = GenerateScheduleThread(self.generate_schedule_window.generate_schedule_image, selected_employees)
         self.generate_schedule_thread.generation_finished.connect(self.on_generation_finished)
         self.generate_schedule_thread.start()
+
+    def show_function_selection_window(self):
+        self.stack.setCurrentIndex(4)
+
+    def show_ranking_window(self):
+        self.stack.setCurrentIndex(5)
+        self.ranking_window.generate_ranking()
 
     def on_generation_finished(self):
         # 在 ScheduleWindow 上去掉显示等待中，显示已完成
