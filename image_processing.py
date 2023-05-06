@@ -363,7 +363,7 @@ def paste_random_size_position_logo(bg_image, logo, min_scale, max_scale):
     # 在背景图上粘贴Logo
     bg_image.paste(logo, (x_position, y_position), logo)
 
-def generate_rank_image(rank):
+def generate_rank_image(rank, month):
 
     # 读取金银铜奖牌图片
     gold_img = Image.open(os.path.join("res", "gold.png"))
@@ -388,14 +388,6 @@ def generate_rank_image(rank):
         # 获取头像图片的内切圆半径
         radius = int(min(avatar_img.width, avatar_img.height) / 2)
 
-        # 循环遍历头像图片的所有像素
-        for x in range(avatar_img.width):
-            for y in range(avatar_img.height):
-                # 如果当前像素在内切圆之外且是白色，则将其转换为透明
-                distance_to_center = ((x - radius) ** 2 + (y - radius) ** 2) ** 0.5
-                if distance_to_center > radius and avatar_data[x, y] == (255, 255, 255, 255):
-                    avatar_data[x, y] = (0, 0, 0, 0)
-
         # 创建一个与头像图片大小相同的透明底图
         mask = Image.new("L", avatar_img.size, 0)
 
@@ -411,24 +403,32 @@ def generate_rank_image(rank):
             avatar_img.paste(silver_img, (600, 600), silver_img)
         elif i == 2:
             avatar_img.paste(copper_img, (600, 600), copper_img)
+        
+        avatar_img = avatar_img.resize((300, 300))
 
         ranked_avatars.append(avatar_img)
+
+
 
     # 创建排名图
     banner_img = Image.open(os.path.join("res", "banner.png"))
     cat_img = Image.open(os.path.join("res", "猫娘.png"))
     store_logo = Image.open(os.path.join("res", "logo.png"))
+    cat_width, cat_height = cat_img.size
+    cat_width = banner_img.width
+    cat_height = int(cat_height * (cat_width / cat_img.width))
+    cat_img = cat_img.resize((cat_width, cat_height), Image.ANTIALIAS)
 
     # 创建临时的 ImageDraw.Draw 对象以获取文本尺寸
     temp_img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     temp_draw = ImageDraw.Draw(temp_img)
 
     font_path = "./res/汉仪喵魂梦境 W.ttf"  # 请提供字体文件路径
-    font_big = ImageFont.truetype(font_path, 1000)
-    font_small = ImageFont.truetype(font_path, 800)
+    font_big = ImageFont.truetype(font_path, 200)
+    font_small = ImageFont.truetype(font_path, 100)
 
     title1 = "桃酱·二次元·助教·桌游"
-    title2 = "淘气女仆排行榜"
+    title2 = month + "桃气女仆排行榜"
 
     # 计算标题尺寸
     title1_size = temp_draw.textsize(title1, font=font_big)
@@ -438,8 +438,8 @@ def generate_rank_image(rank):
     print(max_text_width)
 
     # 计算底图大小
-    width = max_text_width + 40
-    height = 40 + (len(rank) * 840) + title1_size[1] + title2_size[1]
+    width = max_text_width + 40 + banner_img.width + cat_img.width + 40
+    height = 40 + (len(rank) * 300) + title1_size[1] + title2_size[1]
 
     # 创建底图
     final_img = Image.new("RGBA", (width, height), (255, 255, 255, 255))
@@ -449,7 +449,7 @@ def generate_rank_image(rank):
         paste_random_size_position_logo(final_img, store_logo, 0.4, 0.8)
     # 应用20%的白色遮罩
     final_img = final_img.convert("RGBA")
-    overlay = Image.new("RGBA", final_img.size, (255, 255, 255, int(255 * 0.4)))
+    overlay = Image.new("RGBA", final_img.size, (255, 255, 255, int(255 * 0.6)))
     final_img = Image.alpha_composite(final_img, overlay)
 
     # 添加文本
@@ -458,9 +458,11 @@ def generate_rank_image(rank):
     ImageDraw.Draw(final_img).text(((width - title2_size[0]) // 2, 20 + title1_size[1]), title2, font=font_small, fill=(225, 115, 160))
 
     # 将Banner贴在左上角
-    final_img.paste(banner_img, (20, 20), banner_img)
+    # final_img.paste(banner_img, (20, 20), banner_img)
 
     # 添加排名信息
+    first_horizontal_offset = None
+
     for i, name in enumerate(rank):
         if i < 3:
             avatar_img = ranked_avatars[i]
@@ -470,21 +472,38 @@ def generate_rank_image(rank):
             font_size = avatar_height
             adjusted_font = ImageFont.truetype(font_path, font_size)
 
-            text = f"TOP.{i + 1} {name}"
-            text_size = draw.textsize(text, font=adjusted_font)
+            text = f"TOP.{i + 1}    {name}"
+            text_size = draw.textsize(text, font=font_big)
+
+            # 计算文字垂直偏移量以实现中线对齐
+            vertical_offset = (avatar_height - text_size[1]) // 2
+
+            # 计算水平偏移量以使第一条文字居中显示
+            if i == 0:
+                first_horizontal_offset = ((width - text_size[0] - 10) // 2) - 200
 
             # 将头像粘贴到文字右边
-            text_position = (40, 120 + banner_img.height + (i * 800))
-            draw.text(text_position, text, font=adjusted_font, fill=(225, 115, 160))
-            final_img.paste(avatar_img, (text_position[0] + text_size[0] + 10, text_position[1]), avatar_img)
+            text_position = (first_horizontal_offset, banner_img.height + (i * 300) + vertical_offset - 350)
+            ImageDraw.Draw(final_img).text(text_position, text, font=font_big, fill=(225, 115, 160))
+            final_img.paste(avatar_img, (text_position[0] + text_size[0] + 100, text_position[1] - vertical_offset), avatar_img)
         else:
-            break
+            # 调整字体大小以使文字等高
+            font_size = 200  # 调整为合适的字体大小
+            adjusted_font = ImageFont.truetype(font_path, font_size)
+
+            text = f"TOP.{i + 1}    {name}"
+            text_size = draw.textsize(text, font=font_big)
+
+            # 将文字添加到图片中，与第一条文字左端对齐
+            text_position = (first_horizontal_offset, banner_img.height + (i * 300) - 350)
+            ImageDraw.Draw(final_img).text(text_position, text, font=font_big, fill=(225, 115, 160))
 
     # 粘贴猫娘图片
     cat_position = (width - cat_img.width, height - cat_img.height)
     final_img.paste(cat_img, cat_position, cat_img)
 
     # 保存图片
-    final_img.save("ranked_image.png")
+    # final_img.save("ranked_image.png")
+    return final_img
 
 

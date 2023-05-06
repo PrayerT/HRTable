@@ -181,8 +181,16 @@ class RankingWindow(QtWidgets.QWidget):
             rank = [x[0] for x in data[:10]]
             print(rank)
 
+            basename, extension = os.path.splitext(xlsx_files[0])
+            month_string, remaining = basename.split("月", 1)
+            month = month_string[-2:] + "月"
             #TODO: 生成排名表
-            generate_rank_image(rank)
+            rank_image = generate_rank_image(rank, month)
+            if not os.path.exists("./桃花榜"):
+                os.makedirs("./桃花榜")
+
+            output_path = os.path.join("./桃花榜", month + "桃花榜.png")
+            rank_image.save(output_path)
             # 在这里添加将头像合成排名表的代码
 
             self.status_label.setText("排名表生成完毕")
