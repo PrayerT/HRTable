@@ -1,3 +1,4 @@
+import math
 import os
 import cv2
 import numpy as np
@@ -92,12 +93,15 @@ def add_name_to_image(image, name):
     cv2.putText(rotated_text, name, text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
     return rotated_text
 
-def process_all_images(input_folder, output_folder, output_folder_raw):
+def process_all_images(input_folder, input_folder_raw, output_folder, output_folder_raw):
     if not os.path.exists('头像'):
         os.mkdir('头像')
 
     if not os.path.exists('原头像'):
         os.mkdir('原头像')
+
+    if not os.path.exists('照片改'):
+        os.mkdir('照片改')
 
     # 在这里实现批量处理图片功能
     for image_name in os.listdir(input_folder):
@@ -106,9 +110,11 @@ def process_all_images(input_folder, output_folder, output_folder_raw):
 
         # 如果已处理过该图片，并且修改时间未发生变化，则跳过处理
         saved_mtime = get_image_mtime(image_name)
+
         if saved_mtime is not None and saved_mtime == image_mtime:
             print(f"跳过已处理且未更改的图片： {image_name}")
             continue
+
         image = cv2.imread(image_path)
 
         if image is None:
@@ -119,18 +125,30 @@ def process_all_images(input_folder, output_folder, output_folder_raw):
         height, width, _ = image.shape
         aspect_ratio = width / height
 
-        if face is None and aspect_ratio != 1:
-            print(f"人脸识别失败，请手动截取人脸： {image_name}")
-            continue
-
         if face is not None:
             print(f"人脸识别成功： {image_name}")
             face_center = (face[0] + face[2] // 2, face[1] + face[3] // 2)
             max_distance = min(face_center[0], face_center[1], image.shape[1] - face_center[0], image.shape[0] - face_center[1])
-        else:  # 当检测不到人脸且宽高比为1:1时，直接使用图像中心作为人脸中心
-            print(f"人脸识别失败，但图像宽高比为1:1，使用图像中心作为人脸中心： {image_name}")
-            face_center = (int(width / 2), int(height / 2))
-            max_distance = min(face_center[0], face_center[1], image.shape[1] - face_center[0], image.shape[0] - face_center[1])
+        else:
+            # Search for a matching image in the "照片改" folder
+            matching_images = [filename for filename in os.listdir(input_folder_raw) if os.path.splitext(filename)[0] == os.path.splitext(image_name)[0]]
+            if len(matching_images) > 0:
+                print(f"使用照片改中的文件： {image_name}")
+                modified_image_name = matching_images[0]
+                modified_image_path = os.path.join(input_folder_raw, modified_image_name)
+                modified_image = cv2.imread(modified_image_path)
+                height, width, _ = modified_image.shape
+                aspect_ratio = width / height
+                if aspect_ratio == 1:
+                    face_center = (int(width / 2), int(height / 2))
+                    max_distance = min(face_center[0], face_center[1], width - face_center[0], height - face_center[1])
+                    image = modified_image
+                else:
+                    print(f"照片改中的文件宽高比不为1:1： {image_name}")
+                    continue
+            else:
+                print(f"人脸识别失败，请手动截取人脸： {image_name}")
+                continue
 
         cropped_face = crop_face(image, face_center, max_distance, image_name)
 
@@ -145,6 +163,7 @@ def process_all_images(input_folder, output_folder, output_folder_raw):
 
     # 调用 remove_deleted_images 函数删除已删除图片的头像
     remove_deleted_images(input_folder, output_folder, output_folder_raw)
+
 
 def remove_deleted_images(input_folder, output_folder, output_folder_raw):
     input_images = {os.path.splitext(image_name)[0] for image_name in os.listdir(input_folder)}
@@ -374,7 +393,8 @@ def generate_rank_image(rank, month):
     
     for i in range(3):
         # 打开原头像
-        name = rank[i]
+        name = rank[i][0]
+        count = rank[i][1]
         avatar_path = os.path.join("./原头像", f"{name}原头像.png")
         avatar_img = Image.open(avatar_path)
         
@@ -463,7 +483,7 @@ def generate_rank_image(rank, month):
     # 添加排名信息
     first_horizontal_offset = None
 
-    for i, name in enumerate(rank):
+    for i, (name, count) in enumerate(rank):
         if i < 3:
             avatar_img = ranked_avatars[i]
             avatar_height = avatar_img.height
@@ -472,7 +492,8 @@ def generate_rank_image(rank, month):
             font_size = avatar_height
             adjusted_font = ImageFont.truetype(font_path, font_size)
 
-            text = f"TOP.{i + 1}    {name}"
+
+            text = f"TOP.{i + 1}  {name} {count}朵"
             text_size = draw.textsize(text, font=font_big)
 
             # 计算文字垂直偏移量以实现中线对齐
@@ -485,13 +506,16 @@ def generate_rank_image(rank, month):
             # 将头像粘贴到文字右边
             text_position = (first_horizontal_offset, banner_img.height + (i * 300) + vertical_offset - 350)
             ImageDraw.Draw(final_img).text(text_position, text, font=font_big, fill=(225, 115, 160))
-            final_img.paste(avatar_img, (text_position[0] + text_size[0] + 100, text_position[1] - vertical_offset), avatar_img)
+            if count<100:
+                final_img.paste(avatar_img, (text_position[0] + text_size[0] + 100, text_position[1] - vertical_offset), avatar_img)
+            else:
+                final_img.paste(avatar_img, (text_position[0] + text_size[0] + 50, text_position[1] - vertical_offset), avatar_img)
         else:
             # 调整字体大小以使文字等高
             font_size = 200  # 调整为合适的字体大小
             adjusted_font = ImageFont.truetype(font_path, font_size)
 
-            text = f"TOP.{i + 1}    {name}"
+            text = f"TOP.{i + 1}  {name} {count}朵"
             text_size = draw.textsize(text, font=font_big)
 
             # 将文字添加到图片中，与第一条文字左端对齐
@@ -506,4 +530,156 @@ def generate_rank_image(rank, month):
     # final_img.save("ranked_image.png")
     return final_img
 
+def resize_and_crop(image, size):
+    # 计算纵横比
+    aspect_ratio = image.width / image.height
+    target_ratio = size[0] / size[1]
 
+    # 调整宽度并裁剪
+    if aspect_ratio > target_ratio:
+        # 图片宽度过大，裁剪宽度
+        resized_image = image.resize((size[0], int(size[0] / aspect_ratio)))
+        # 计算上下裁剪的边界
+        top = (resized_image.height - size[1]) / 2
+        bottom = (resized_image.height + size[1]) / 2
+        # 裁剪图片
+        resized_image = resized_image.crop((0, top, size[0], bottom))
+    else:
+        # 图片高度过大，裁剪高度
+        resized_image = image.resize((int(size[1] * aspect_ratio), size[1]))
+        # 计算左右裁剪的边界
+        left = (resized_image.width - size[0]) / 2
+        right = (resized_image.width + size[0]) / 2
+        # 裁剪图片
+        resized_image = resized_image.crop((left, 0, right, size[1]))
+
+    return resized_image
+
+def draw_title(draw, title_text, title_font, global_y, margin, canvas_width):
+    title_size = draw.textsize(title_text, font=title_font)
+    title_position = ((canvas_width - title_size[0]) // 2, global_y)
+    draw.text(title_position, title_text, font=title_font, fill=(0, 0, 0))
+    return title_position[1] + title_size[1] + margin
+
+def draw_subtitle(draw, subtitle_text, subtitle_font, global_y, margin, canvas_width):
+    subtitle_size = draw.textsize(subtitle_text, font=subtitle_font)
+    subtitle_position = ((canvas_width - subtitle_size[0]) // 2, global_y)
+    draw.text(subtitle_position, subtitle_text, font=subtitle_font, fill=(0, 0, 0))
+    return subtitle_position[1] + subtitle_size[1] + margin * 2
+
+def paste_cat_image(canvas, cat_image_path, canvas_width, global_y, margin):
+    cat_image = Image.open(cat_image_path)
+    cat_image.thumbnail((200, 200))
+    canvas.paste(cat_image, (canvas_width - cat_image.width - margin, global_y), cat_image)
+    return global_y + cat_image.height
+
+def draw_employee(canvas, draw, employee, employee_image_path, name_font, global_x, global_y, margin, canvas_width, current_ranking):
+    # 加载并调整员工照片的大小
+    employee_image = Image.open(employee_image_path)
+    employee_image = resize_and_crop(employee_image, (600, 800))  # 调整员工照片的大小并裁剪
+    canvas.paste(employee_image, (global_x, global_y))
+    # 绘制员工姓名
+    name_position = (global_x + (employee_image.width - draw.textsize(employee, font=name_font)[0]) // 2, global_y + employee_image.height)
+    draw.text(name_position, employee, font=name_font, fill=(0, 0, 0))
+    # 更新坐标
+    global_x += employee_image.width + margin
+    if global_x > canvas_width - employee_image.width - margin:
+        global_x = margin
+        if current_ranking == "S":
+            global_y += employee_image.height + margin * 4  # 调整S级员工的位置
+        else:
+            global_y += employee_image.height + margin * 2
+    return global_x, global_y, employee_image
+
+def draw_separator(draw, y, canvas_width, line_color=(0, 0, 0), line_width=3):
+    draw.line([(0, int(y)), (int(canvas_width), int(y))], fill=line_color, width=line_width)
+    print(f"separator_y = {y}")
+
+def generate_show_image(employees_by_ranking):
+    # 设置参数
+    margin = 20
+    max_images_per_row = 4
+    title_text = "桃酱·二次元·助教·桌游CLUB"
+    subtitle_text = "助教一览表"
+    cat_image_path = "./res/猫娘.png"
+
+    # 加载字体
+    title_font = ImageFont.truetype(font_path, 50)
+    subtitle_font = ImageFont.truetype(font_path, 30)
+    name_font = ImageFont.truetype(font_path, 24)
+    ranking_font = ImageFont.truetype(font_path, 40)
+
+    # 计算画布的大小
+    canvas_width = 800 * max_images_per_row + margin * (max_images_per_row + 1)
+    canvas_height = 0
+
+    # 创建一个画笔对象，用于计算文本大小
+    temp_img = Image.new('RGBA', (1, 1))
+    draw = ImageDraw.Draw(temp_img)
+
+    # 计算标题和副标题高度并更新画布高度
+    title_size = draw.textsize(title_text, font=title_font)
+    subtitle_size = draw.textsize(subtitle_text, font=subtitle_font)
+    canvas_height += title_size[1] + subtitle_size[1] + margin * 4
+
+    # 计算员工照片高度并更新画布高度
+    for ranking, employees in employees_by_ranking.items():
+        rows = math.ceil(len(employees) / max_images_per_row)
+        image_path = f"./照片/{employees[0]}.jpg"  # 假设所有员工照片的高度相同
+        if not os.path.exists(image_path):
+            image_path = f"./照片/{employees[0]}.jpeg"
+        employee_image = Image.open(image_path)
+        canvas_height += rows * (employee_image.height * 800 // employee_image.width + margin * 2)
+
+    # 此时我们知道了画布的大小，所以我们可以创建画布
+    canvas = Image.new('RGBA', (canvas_width, canvas_height), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    # 使用全局坐标
+    global_x = margin
+    global_y = margin
+
+    # 绘制标题
+    global_y = draw_title(draw, title_text, title_font, global_y, margin, canvas_width)
+
+    # 绘制副标题
+    global_y = draw_subtitle(draw, subtitle_text, subtitle_font, global_y, margin, canvas_width)
+
+    # 粘贴猫娘图片
+    global_y += paste_cat_image(canvas, cat_image_path, canvas_width, global_y, margin)
+
+    # 插入分隔线
+    draw_separator(draw, global_y, canvas_width)
+    global_y += margin * 2
+
+    # 遍历员工照片
+    for ranking_index, (ranking, employees) in enumerate(sorted(employees_by_ranking.items(), key=lambda item: item[0], reverse=True)):
+        if ranking_index > 0:  # 如果不是第一个等级，插入分隔线
+            draw_separator(draw, global_y, canvas_width)
+            global_y += margin * 2
+
+        global_y += margin
+        draw.text((margin, global_y), ranking, font=ranking_font, fill=(0, 0, 0))  # 绘制等级
+        global_y += margin * 2
+
+        employee_count = 0
+
+        for employee in employees:
+            image_path = f"./照片/{employee}.jpg"
+            if not os.path.exists(image_path):
+                image_path = f"./照片/{employee}.jpeg"
+
+            global_x, global_y, employee_image = draw_employee(canvas, draw, employee, image_path, name_font, global_x, global_y, margin, canvas_width, ranking)
+            employee_count += 1
+
+            # 如果S级员工的照片没有填满一行，剩下的位置将被空出来
+            if ranking == "S" and employee_count == len(employees) and employee_count % max_images_per_row != 0:
+                global_x = margin
+                global_y += employee_image.height + margin * 4  # 调整S级员工的位置
+            elif employee_count % max_images_per_row == 0:
+                global_x = margin
+                global_y += employee_image.height + margin * 2  # 调整A级员工的位置
+            else:
+                global_x += margin
+
+    canvas.save("output.png")

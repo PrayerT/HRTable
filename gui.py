@@ -1,5 +1,8 @@
+import subprocess
+import sys
 from PyQt5 import QtWidgets, QtGui, QtCore
-from image_processing import generate_rank_image, process_all_images, remove_deleted_images, generate_schedule_image
+from PyQt5.QtGui import QPixmap
+from image_processing import generate_rank_image, generate_show_image, process_all_images, remove_deleted_images, generate_schedule_image
 from database import init_database, register_user, login_user, update_schedule, get_schedule, isRegistered
 from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
@@ -62,7 +65,7 @@ class LoginWindow(QtWidgets.QWidget):
 class RegisterWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        process_all_images("./照片","./头像","./原头像")
+        process_all_images("./照片", "./照片改","./头像","./原头像")
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
@@ -121,9 +124,11 @@ class FunctionSelectionWindow(QtWidgets.QWidget):
 
         self.schedule_button = QtWidgets.QPushButton("排班表生成")
         self.ranking_button = QtWidgets.QPushButton("排名表生成")
-
+        self.show_employee_photos_button = QtWidgets.QPushButton('生成员工展示图')
+        
         layout.addWidget(self.schedule_button)
         layout.addWidget(self.ranking_button)
+        layout.addWidget(self.show_employee_photos_button)
 
         self.setLayout(layout)
 
@@ -166,25 +171,24 @@ class RankingWindow(QtWidgets.QWidget):
             # 选择工作表
             worksheet = workbook.active
             data = []
-            for row in worksheet.iter_rows(min_row=3, max_col=3):
+            for row in worksheet.iter_rows(min_row=2, max_col=2):
                 employee_name = row[0].value
                 if employee_name is None:
                     continue
                 quantity = row[1].value
-                total_price = row[2].value
-                data.append((employee_name, quantity, total_price))
-                print(employee_name, quantity, total_price)
+                # total_price = row[2].value
+                data.append((employee_name, quantity))
+                print(employee_name, quantity)
 
             # 按总价降序排序
-            data.sort(key=lambda x: x[2], reverse=True)
+            data.sort(key=lambda x: x[1], reverse=True)
 
-            rank = [x[0] for x in data[:10]]
+            rank = data[:10]
             print(rank)
 
             basename, extension = os.path.splitext(xlsx_files[0])
             month_string, remaining = basename.split("月", 1)
             month = month_string[-2:] + "月"
-            #TODO: 生成排名表
             rank_image = generate_rank_image(rank, month)
             if not os.path.exists("./桃花榜"):
                 os.makedirs("./桃花榜")
@@ -311,7 +315,91 @@ class ScheduleWindow(QtWidgets.QWidget):
             return self.get_current_employee_checkboxes(tab)
         return []
 
+class EmployeePhotoWindow(QtWidgets.QWidget):
+    def __init__(self, employees):
+        super().__init__()
 
+        self.employees = employees
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QtWidgets.QVBoxLayout()
+
+        # 创建名册
+        self.create_employee_roster()
+
+        # 文本提示
+        self.text_prompt = QtWidgets.QLabel("请检查名册，填写分级，如果检查全部正确，请点击生成图片按钮开始生成")
+        layout.addWidget(self.text_prompt)
+
+        # 按钮
+        self.open_roster_btn = QtWidgets.QPushButton("打开名册")
+        self.open_roster_btn.clicked.connect(self.open_employee_roster)
+        layout.addWidget(self.open_roster_btn)
+
+        self.generate_pic_btn = QtWidgets.QPushButton("生成图片")
+        self.generate_pic_btn.clicked.connect(self.generate_show_pic)
+        layout.addWidget(self.generate_pic_btn)
+
+        self.confirm_btn = QtWidgets.QPushButton("确认")
+        self.confirm_btn.clicked.connect(self.close)
+        layout.addWidget(self.confirm_btn)
+        self.confirm_btn.hide()
+
+        self.setLayout(layout)
+
+    def create_employee_roster(self):
+        avatars_folder = "./照片"
+        roster_filename = "女仆名册.txt"
+
+        # 检查文件是否存在，如果不存在则创建
+        if not os.path.exists(roster_filename):
+            with open(roster_filename, "w", encoding="utf-8") as roster_file:
+                for employee in self.employees:
+                    roster_file.write(f"{employee}:\n")
+        else:
+            print(f"文件 {roster_filename} 已存在，不会覆盖编辑过的内容。")
+
+    def open_employee_roster(self):
+        roster_filename = "女仆名册.txt"
+        if sys.platform.startswith('darwin'):
+            subprocess.call(('open', roster_filename))
+        elif os.name == 'nt':
+            os.startfile(roster_filename)
+        elif os.name == 'posix':
+            subprocess.call(('xdg-open', roster_filename))
+        else:
+            print("未知操作系统，无法自动打开文件。请手动打开：", roster_filename)
+
+
+    def read_employee_roster(self,roster_filename):
+        employee_rankings = {}
+        with open(roster_filename, "r", encoding="utf-8") as roster_file:
+            for line in roster_file:
+                employee, ranking = line.strip().split(":")
+                employee_rankings[employee] = ranking
+
+        return employee_rankings
+
+    def prepare_employee_data(self):
+        roster_filename = "女仆名册.txt"
+        employee_rankings = self.read_employee_roster(roster_filename)
+
+        employees_by_ranking = {}
+        for employee, ranking in employee_rankings.items():
+            if ranking not in employees_by_ranking:
+                employees_by_ranking[ranking] = []
+            employees_by_ranking[ranking].append(employee)
+
+        return employees_by_ranking
+
+    def generate_show_pic(self):
+        employees_by_ranking = self.prepare_employee_data()
+        generate_show_image(employees_by_ranking)
+        self.text_prompt.setText("图片生成完成")
+        self.open_roster_btn.hide()
+        self.generate_pic_btn.hide()
+        self.confirm_btn.show()
 
 class GenerateScheduleWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -389,6 +477,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.generate_schedule_window = GenerateScheduleWindow()
         self.function_selection_window = FunctionSelectionWindow()
         self.ranking_window = RankingWindow()
+        self.employee_photo_window = EmployeePhotoWindow(self.employees)
 
         # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
@@ -397,6 +486,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stack.addWidget(self.generate_schedule_window)
         self.stack.addWidget(self.function_selection_window)
         self.stack.addWidget(self.ranking_window)
+        self.stack.addWidget(self.employee_photo_window)
 
         # 设置堆栈窗口部件为中心部件
         self.setCentralWidget(self.stack)
@@ -408,6 +498,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.schedule_window.wait_button.clicked.connect(self.show_generate_schedule_window)
         self.function_selection_window.schedule_button.clicked.connect(self.show_schedule_window)
         self.function_selection_window.ranking_button.clicked.connect(self.show_ranking_window)
+        self.function_selection_window.show_employee_photos_button.clicked.connect(self.show_employee_photo_window)
 
 
     def show_login_window(self):
@@ -440,6 +531,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_ranking_window(self):
         self.stack.setCurrentIndex(5)
         self.ranking_window.generate_ranking()
+
+    def show_employee_photo_window(self):
+        self.stack.setCurrentIndex(6)
 
     def on_generation_finished(self):
         # 在 ScheduleWindow 上去掉显示等待中，显示已完成
