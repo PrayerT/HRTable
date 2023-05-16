@@ -12,6 +12,7 @@ from database import get_image_mtime, save_image_mtime
 # 将 face_cascade 定义为全局变量
 face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "res/汉仪喵魂梦境 W.ttf")
+text_color = (225, 115, 160)
 
 
 def detect_face(image):
@@ -558,40 +559,32 @@ def resize_and_crop(image, size):
 def draw_title(draw, title_text, title_font, global_y, margin, canvas_width):
     title_size = draw.textsize(title_text, font=title_font)
     title_position = ((canvas_width - title_size[0]) // 2, global_y)
-    draw.text(title_position, title_text, font=title_font, fill=(0, 0, 0))
-    return title_position[1] + title_size[1] + margin
+    draw.text(title_position, title_text, font=title_font, fill=text_color)
+    return title_position[1] + title_size[1] + margin, title_position
 
 def draw_subtitle(draw, subtitle_text, subtitle_font, global_y, margin, canvas_width):
     subtitle_size = draw.textsize(subtitle_text, font=subtitle_font)
     subtitle_position = ((canvas_width - subtitle_size[0]) // 2, global_y)
-    draw.text(subtitle_position, subtitle_text, font=subtitle_font, fill=(0, 0, 0))
+    draw.text(subtitle_position, subtitle_text, font=subtitle_font, fill=text_color)
     return subtitle_position[1] + subtitle_size[1] + margin * 2
 
 def paste_cat_image(canvas, cat_image_path, canvas_width, global_y, margin):
     cat_image = Image.open(cat_image_path)
-    cat_image.thumbnail((200, 200))
+    cat_image.thumbnail((400, 400))
     canvas.paste(cat_image, (canvas_width - cat_image.width - margin, global_y), cat_image)
     return global_y + cat_image.height
 
-def draw_employee(canvas, draw, employee, employee_image_path, name_font, global_x, global_y, margin, canvas_width, current_ranking):
+def draw_employee(canvas, draw, employee, employee_image_path, name_font, global_x, global_y, margin, canvas_width):
     # 加载并调整员工照片的大小
     employee_image = Image.open(employee_image_path)
     employee_image = resize_and_crop(employee_image, (600, 800))  # 调整员工照片的大小并裁剪
     canvas.paste(employee_image, (global_x, global_y))
     # 绘制员工姓名
     name_position = (global_x + (employee_image.width - draw.textsize(employee, font=name_font)[0]) // 2, global_y + employee_image.height)
-    draw.text(name_position, employee, font=name_font, fill=(0, 0, 0))
-    # 更新坐标
-    global_x += employee_image.width + margin
-    if global_x > canvas_width - employee_image.width - margin:
-        global_x = margin
-        if current_ranking == "S":
-            global_y += employee_image.height + margin * 4  # 调整S级员工的位置
-        else:
-            global_y += employee_image.height + margin * 2
-    return global_x, global_y, employee_image
+    draw.text(name_position, employee, font=name_font, fill=text_color)
+    return global_x + employee_image.width + margin, employee_image
 
-def draw_separator(draw, y, canvas_width, line_color=(0, 0, 0), line_width=3):
+def draw_separator(draw, y, canvas_width, line_color=text_color, line_width=3):
     draw.line([(0, int(y)), (int(canvas_width), int(y))], fill=line_color, width=line_width)
     print(f"separator_y = {y}")
 
@@ -602,25 +595,37 @@ def generate_show_image(employees_by_ranking):
     title_text = "桃酱·二次元·助教·桌游CLUB"
     subtitle_text = "助教一览表"
     cat_image_path = "./res/猫娘.png"
+    line_color = (225, 115, 160)
+    line_width = 2
 
     # 加载字体
-    title_font = ImageFont.truetype(font_path, 50)
-    subtitle_font = ImageFont.truetype(font_path, 30)
-    name_font = ImageFont.truetype(font_path, 24)
-    ranking_font = ImageFont.truetype(font_path, 40)
+    title_font = ImageFont.truetype(font_path, 150)
+    subtitle_font = ImageFont.truetype(font_path, 130)
+    name_font = ImageFont.truetype(font_path, 80)
+    ranking_font = ImageFont.truetype(font_path, 80)
 
     # 计算画布的大小
-    canvas_width = 800 * max_images_per_row + margin * (max_images_per_row + 1)
+    image_width = 600  # 假设所有图片的宽度都为600
+    canvas_width = image_width * max_images_per_row + margin * (max_images_per_row + 1)
     canvas_height = 0
 
     # 创建一个画笔对象，用于计算文本大小
     temp_img = Image.new('RGBA', (1, 1))
     draw = ImageDraw.Draw(temp_img)
 
-    # 计算标题和副标题高度并更新画布高度
+    # 计算标题、副标题的高度并更新画布高度
     title_size = draw.textsize(title_text, font=title_font)
     subtitle_size = draw.textsize(subtitle_text, font=subtitle_font)
-    canvas_height += title_size[1] + subtitle_size[1] + margin * 4
+
+    # 计算猫娘图片的大小
+    cat_image = Image.open(cat_image_path)
+    cat_image.thumbnail((400, 400))  # 假设你把猫娘图片放大到原来的两倍
+    cat_image_width, cat_image_height = cat_image.size
+
+    # 计算标题、副标题和猫娘图片整体的高度
+    total_height = max(title_size[1] + subtitle_size[1] + margin, cat_image_height)
+
+    canvas_height += total_height + margin * 2  # 这里修改为总高度加上上下间距
 
     # 计算员工照片高度并更新画布高度
     for ranking, employees in employees_by_ranking.items():
@@ -629,10 +634,20 @@ def generate_show_image(employees_by_ranking):
         if not os.path.exists(image_path):
             image_path = f"./照片/{employees[0]}.jpeg"
         employee_image = Image.open(image_path)
-        canvas_height += rows * (employee_image.height * 800 // employee_image.width + margin * 2)
+        ranking_size = draw.textsize(ranking, font=ranking_font)
+        name_size = draw.textsize(employees[0], font=name_font)  # 假设所有员工姓名的高度相同
+        canvas_height += rows * (employee_image.height * image_width // employee_image.width + ranking_size[1] + name_size[1] + margin * 5)
 
     # 此时我们知道了画布的大小，所以我们可以创建画布
     canvas = Image.new('RGBA', (canvas_width, canvas_height), (255, 255, 255, 255))
+    logo = Image.open("res/logo.png")
+    # 使用随机大小和位置的Logo
+    num_of_logos = 20  # 更改此值以设置要添加的Logo数量
+    for _ in range(num_of_logos):
+        paste_random_size_position_logo(canvas, logo, 0.4, 1)
+    # 应用20%的白色遮罩
+    overlay = Image.new("RGBA", canvas.size, (255, 255, 255, int(255 * 0.4)))
+    canvas = Image.alpha_composite(canvas, overlay)
     draw = ImageDraw.Draw(canvas)
 
     # 使用全局坐标
@@ -640,45 +655,53 @@ def generate_show_image(employees_by_ranking):
     global_y = margin
 
     # 绘制标题
-    global_y = draw_title(draw, title_text, title_font, global_y, margin, canvas_width)
+    global_y, title_position = draw_title(draw, title_text, title_font, global_y + (total_height - title_size[1] - subtitle_size[1] - margin) // 2, margin, canvas_width)
 
     # 绘制副标题
-    global_y = draw_subtitle(draw, subtitle_text, subtitle_font, global_y, margin, canvas_width)
+    global_y = draw_subtitle(draw, subtitle_text, subtitle_font, global_y + margin, margin, canvas_width)
 
     # 粘贴猫娘图片
-    global_y += paste_cat_image(canvas, cat_image_path, canvas_width, global_y, margin)
+    paste_cat_image(canvas, cat_image_path, canvas_width, margin, margin)
 
-    # 插入分隔线
-    draw_separator(draw, global_y, canvas_width)
-    global_y += margin * 2
+    # 更新 y 坐标
+    global_y = total_height + margin * 2
 
     # 遍历员工照片
     for ranking_index, (ranking, employees) in enumerate(sorted(employees_by_ranking.items(), key=lambda item: item[0], reverse=True)):
-        if ranking_index > 0:  # 如果不是第一个等级，插入分隔线
-            draw_separator(draw, global_y, canvas_width)
-            global_y += margin * 2
+        # if ranking_index > 0:  # 如果不是第一个等级，插入分隔线
+        separator_y = global_y  # 分割线的y坐标
+        draw.line([(0, int(separator_y)), (int(canvas_width), int(separator_y))], fill=line_color, width=line_width)
+        global_y += margin * 2
 
         global_y += margin
-        draw.text((margin, global_y), ranking, font=ranking_font, fill=(0, 0, 0))  # 绘制等级
-        global_y += margin * 2
+        ranking_size = draw.textsize(ranking, font=ranking_font)
+        ranking_position = ((canvas_width - ranking_size[0]) // 2, global_y - ranking_size[1] // 2)
+        ranking_text = str.upper(ranking) + "级"
+        draw.text(ranking_position, ranking_text, font=ranking_font, fill=text_color)  # 绘制等级
+        global_y += ranking_size[1] + margin * 2
 
         employee_count = 0
 
+        max_name_height = 0
+        employee_images = []
         for employee in employees:
             image_path = f"./照片/{employee}.jpg"
             if not os.path.exists(image_path):
                 image_path = f"./照片/{employee}.jpeg"
+            name_size = draw.textsize(employee, font=name_font)
+            max_name_height = max(max_name_height, name_size[1])
+            employee_images.append((employee, image_path))
 
-            global_x, global_y, employee_image = draw_employee(canvas, draw, employee, image_path, name_font, global_x, global_y, margin, canvas_width, ranking)
+        for employee, image_path in employee_images:
+            global_x, employee_image = draw_employee(canvas, draw, employee, image_path, name_font, global_x, global_y, margin, canvas_width)
             employee_count += 1
 
-            # 如果S级员工的照片没有填满一行，剩下的位置将被空出来
             if ranking == "S" and employee_count == len(employees) and employee_count % max_images_per_row != 0:
                 global_x = margin
-                global_y += employee_image.height + margin * 4  # 调整S级员工的位置
+                global_y += employee_image.height + max_name_height + margin * 4  # 调整S级员工的位置
             elif employee_count % max_images_per_row == 0:
                 global_x = margin
-                global_y += employee_image.height + margin * 2  # 调整A级员工的位置
+                global_y += employee_image.height + max_name_height + margin * 2  # 调整A级员工的位置
             else:
                 global_x += margin
 
