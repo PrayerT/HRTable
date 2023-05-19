@@ -9,6 +9,7 @@ import os
 import openpyxl
 from datetime import datetime
 from PyQt5.QtCore import QThread, pyqtSignal
+import word_processing
 
 class LoginWindow(QtWidgets.QWidget):
     login_success = QtCore.pyqtSignal()
@@ -205,116 +206,41 @@ class RankingWindow(QtWidgets.QWidget):
             print(f"生成排名表时出现错误：{str(e)}")
 
 class ScheduleWindow(QtWidgets.QWidget):
-    def __init__(self, employees):
+    def __init__(self):
         super().__init__()
-        self.employees = employees
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
 
-        self.week_days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-        self.tab_widget = QtWidgets.QTabWidget()
+        # 创建文本编辑框并添加到布局中
+        self.text_edit = QtWidgets.QTextEdit()
+        layout.addWidget(self.text_edit)
 
-        self.tabs = []
-        employee_chunks = [self.employees]
-        self.employee_checkboxes = {}  # 初始化 employee_checkboxes 字典
-        for i in range(7):
-            tab = self.create_employee_tab(employee_chunks[i % len(employee_chunks)])
-            self.tabs.append(tab)
-            self.tab_widget.addTab(tab, self.week_days[i])
+        # 创建等待生成按钮并添加到布局中
+        self.generate_button = QtWidgets.QPushButton('等待生成')
+        self.generate_button.setEnabled(False)  # 初始状态设为不可按
+        layout.addWidget(self.generate_button)
 
-        layout.addWidget(self.tab_widget)
-
-        button_layout = QtWidgets.QHBoxLayout()
-        self.select_all_button = QtWidgets.QPushButton('全选')
-        self.select_inverse_button = QtWidgets.QPushButton('反选')
-        self.clear_selection_button = QtWidgets.QPushButton('清空')
-        self.wait_button = QtWidgets.QPushButton('等待生成')
-        button_layout.addWidget(self.select_all_button)
-        button_layout.addWidget(self.select_inverse_button)
-        button_layout.addWidget(self.clear_selection_button)
-        button_layout.addWidget(self.wait_button)
-        layout.addLayout(button_layout)
-        
+        # 将布局设置为窗口的布局
         self.setLayout(layout)
 
         # 连接信号和槽
-        self.select_all_button.clicked.connect(self.select_all)
-        self.select_inverse_button.clicked.connect(self.select_inverse)
-        self.clear_selection_button.clicked.connect(self.clear_selection)
+        self.text_edit.textChanged.connect(self.update_button_state)
+        self.generate_button.clicked.connect(self.process_input)
 
-    def get_active_tab_employee_checkboxes(self):
-        current_tab_index = self.tab_widget.currentIndex()
-        if current_tab_index < 0 or current_tab_index >= len(self.tabs):
-            return []
-        current_tab = self.tabs[current_tab_index]
-        return self.get_current_employee_checkboxes(current_tab)
-    
-    def select_inverse(self):
-        # 实现反选功能
-        employee_checkboxes = self.get_active_tab_employee_checkboxes()
-        for employee_checkbox in employee_checkboxes:
-            employee_checkbox.setChecked(not employee_checkbox.isChecked())
+    def update_button_state(self):
+        # 如果输入框不为空，按钮设为可按
+        if self.text_edit.toPlainText().strip():
+            self.generate_button.setEnabled(True)
+        else:
+            self.generate_button.setEnabled(False)
 
-    def select_all(self):
-        # 实现全选功能
-        employee_checkboxes = self.get_active_tab_employee_checkboxes()
-        for employee_checkbox in employee_checkboxes:
-            employee_checkbox.setChecked(True)
-
-    def clear_selection(self):
-        # 实现清空功能
-        employee_checkboxes = self.get_active_tab_employee_checkboxes()
-        for employee_checkbox in employee_checkboxes:
-            employee_checkbox.setChecked(False)
-
-    def create_employee_tab(self, employees):
-        # 创建一个新的选项卡
-        tab = QtWidgets.QWidget()
-        
-        # 为选项卡创建一个 QVBoxLayout
-        layout = QVBoxLayout()
-        
-        # 将员工复选框添加到布局中
-        for employee in employees:
-            checkbox = QtWidgets.QCheckBox(employee)
-            layout.addWidget(checkbox)
-        
-        # 将布局添加到选项卡中
-        tab.setLayout(layout)
-        
-        return tab
+    def process_input(self):
+        # 处理文本输入
+        input_text = self.text_edit.toPlainText()
+        processed_text = word_processing.parse_schedule_text(input_text, "照片")  # 假设 word_processing.py 有一个叫做 process 的函数
+        return processed_text
     
-    def load_schedule(self, schedule_data):
-        print(f"Loading schedule data: {schedule_data}")
-        for i, tab in enumerate(self.tabs):
-            employee_checkboxes = self.get_current_employee_checkboxes(tab)
-            for checkbox in employee_checkboxes:
-                if checkbox.text() in schedule_data[self.week_days[i]]:
-                    checkbox.setChecked(True)
-    
-    def get_current_employee_checkboxes(self, tab):
-        layout = tab.layout()
-        employee_checkboxes = [layout.itemAt(i).widget() for i in range(layout.count()) if isinstance(layout.itemAt(i).widget(), QtWidgets.QCheckBox)]
-        return employee_checkboxes
-    
-    def get_selected_employees(self):
-        selected_employees = {}
-        for i, tab in enumerate(self.tabs):
-            checkboxes = self.get_current_employee_checkboxes(tab)
-            selected = [checkbox.text() for checkbox in checkboxes if checkbox.isChecked()]
-            print(f"Selected employees on {self.week_days[i]}: {selected}")  # 添加 log 输出
-            selected_employees[self.week_days[i]] = selected
-        print(f"Selected employees: {selected_employees}")  # 添加 log 输出
-        return selected_employees
-    
-    def get_employee_checkboxes_for_week_day(self, week_day):
-        # Get the employee checkboxes for a specific week_day
-        if 1 <= week_day <= len(self.tabs):
-            tab = self.tabs[week_day - 1]
-            return self.get_current_employee_checkboxes(tab)
-        return []
-
 class EmployeePhotoWindow(QtWidgets.QWidget):
     def __init__(self, employees):
         super().__init__()
@@ -465,13 +391,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.register_window = RegisterWindow()
         self.week_days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
-
         avatars_folder = "./照片"
         image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp"}
         self.employees = [os.path.splitext(filename)[0] for filename in os.listdir(avatars_folder) if os.path.splitext(filename)[1].lower() in image_extensions]
 
         # 创建 ScheduleWindow 并传递员工列表
-        self.schedule_window = ScheduleWindow(self.employees)
+        self.schedule_window = ScheduleWindow()
         self.show_schedule_window()
 
         self.generate_schedule_window = GenerateScheduleWindow()
@@ -491,15 +416,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # 设置堆栈窗口部件为中心部件
         self.setCentralWidget(self.stack)
 
-        # 连接信号和槽
+ # 连接信号和槽
         self.login_window.login_success.connect(self.show_function_selection_window)
         self.login_window.register_button.clicked.connect(self.show_register_window)
         self.register_window.back_button.clicked.connect(self.show_login_window)
-        self.schedule_window.wait_button.clicked.connect(self.show_generate_schedule_window)
+        self.schedule_window.generate_button.clicked.connect(self.show_generate_schedule_window)
         self.function_selection_window.schedule_button.clicked.connect(self.show_schedule_window)
         self.function_selection_window.ranking_button.clicked.connect(self.show_ranking_window)
         self.function_selection_window.show_employee_photos_button.clicked.connect(self.show_employee_photo_window)
-
 
     def show_login_window(self):
         self.stack.setCurrentIndex(0)
@@ -507,24 +431,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_register_window(self):
         self.stack.setCurrentIndex(1)
 
-    def show_schedule_window(self, load_schedule=True):
-        if load_schedule:
-            user_id = 1  # Assuming the user_id is 1, replace it with the actual user_id after implementing user login
-            schedule_data = {self.week_days[week_day - 1]: get_schedule(user_id, week_day) for week_day in range(1, 8)}
-            self.schedule_window.load_schedule(schedule_data)
+    def show_schedule_window(self):
         self.stack.setCurrentIndex(2)
 
     def show_generate_schedule_window(self):
         self.stack.setCurrentIndex(3)
-        # 获取当前选定的员工数据
-        selected_employees = self.schedule_window.get_selected_employees()
-        self.save_schedule()
+        # 获取并处理当前的排班信息
+        processed_schedule = self.schedule_window.process_input()
 
         # 创建新线程用于处理耗时操作
-        self.generate_schedule_thread = GenerateScheduleThread(self.generate_schedule_window.generate_schedule_image, selected_employees)
+        self.generate_schedule_thread = GenerateScheduleThread(self.generate_schedule_window.generate_schedule_image, processed_schedule)
         self.generate_schedule_thread.generation_finished.connect(self.on_generation_finished)
         self.generate_schedule_thread.start()
-
+        
     def show_function_selection_window(self):
         self.stack.setCurrentIndex(4)
 
