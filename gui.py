@@ -4,7 +4,6 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtGui import QPixmap
 from image_processing import generate_rank_image, generate_show_image, process_all_images, remove_deleted_images, generate_schedule_image
 from database import init_database, register_user, login_user, update_schedule, get_schedule, isRegistered
-from PyQt5.QtWidgets import QVBoxLayout, QScrollArea
 import os
 import openpyxl
 from datetime import datetime
@@ -264,11 +263,11 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         layout.addWidget(self.open_roster_btn)
 
         self.generate_pic_btn = QtWidgets.QPushButton("生成图片")
-        self.generate_pic_btn.clicked.connect(self.generate_show_pic)
+        self.generate_pic_btn.clicked.connect(self.on_generate_pic_clicked)
         layout.addWidget(self.generate_pic_btn)
 
         self.confirm_btn = QtWidgets.QPushButton("确认")
-        self.confirm_btn.clicked.connect(self.close)
+        self.confirm_btn.clicked.connect(self.on_confirm_clicked)
         layout.addWidget(self.confirm_btn)
         self.confirm_btn.hide()
 
@@ -327,6 +326,40 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         self.generate_pic_btn.hide()
         self.confirm_btn.show()
 
+    def on_generate_pic_clicked(self):
+        print("Generate button clicked, checking rankings...")
+        employees_without_rankings = self.check_employee_rankings()
+        if employees_without_rankings:
+            print(f"Employees without rankings found: {', '.join(employees_without_rankings)}")
+            self.text_prompt.setText("以下员工没有被分级：\n" + "\n".join(employees_without_rankings))
+            return
+
+        print("All employees have rankings, generating picture...")
+        self.generate_show_pic()
+
+    def check_employee_rankings(self):
+        roster_filename = "女仆名册.txt"
+        avatars_folder = "./照片"
+
+        # 从名册文件中获取已经分级的员工
+        ranked_employees = self.read_employee_roster(roster_filename).keys()
+        print(f"Ranked employees: {', '.join(ranked_employees)}")
+
+        # 从照片文件夹获取所有员工
+        all_employees = [f.replace('.jpg', '').replace('.jpeg', '') 
+                        for f in os.listdir(avatars_folder) if f.endswith('.jpg') or f.endswith('.jpeg')]
+        print(f"All employees: {', '.join(all_employees)}")
+
+        # 查找没有分级的员工
+        employees_without_rankings = [employee for employee in all_employees if employee not in ranked_employees]
+        print(f"Employees without rankings: {', '.join(employees_without_rankings)}")
+
+        return employees_without_rankings
+    
+    def on_confirm_clicked(self):
+        print("Confirm button clicked, closing application...")
+        QtWidgets.qApp.quit()
+    
 class GenerateScheduleWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -416,7 +449,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 设置堆栈窗口部件为中心部件
         self.setCentralWidget(self.stack)
 
- # 连接信号和槽
+        # 连接信号和槽
         self.login_window.login_success.connect(self.show_function_selection_window)
         self.login_window.register_button.clicked.connect(self.show_register_window)
         self.register_window.back_button.clicked.connect(self.show_login_window)
