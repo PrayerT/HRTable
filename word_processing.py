@@ -4,23 +4,23 @@ import os
 def parse_schedule_text(schedule_text, employee_dir):
     week_days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
     schedule = {day: [] for day in week_days}
-    
-    # 获取照片文件夹下的所有文件名
-    employees = [file.split('.')[0] for file in os.listdir(employee_dir)]
-    
+
+    # 获取照片文件夹下的所有文件名，并转换为小写
+    employees = [file.lower().split('.')[0] for file in os.listdir(employee_dir)]
+
     lines = schedule_text.split('\n')
     for line in lines:
         # 使用正则表达式提取员工名称和工作日信息
         match = re.search(r'\d+\. ([\u4e00-\u9fa5A-Za-z]+).*?([\d]+)', line)
         if match:
-            # 提取员工名字并去掉职位标签
-            employee = re.sub(r'(全职|兼职|店长)', '', match.group(1)).strip()
+            # 提取员工名字并去掉职位标签，转换为小写形式
+            employee = re.sub(r'(全职|兼职|店长)', '', match.group(1)).strip().lower()
             work_days = match.group(2)
             # 仅当提取出的员工名字是照片文件夹下的文件名时，才将其添加到排班表中
             if employee in employees:
                 for day in work_days:
                     schedule[week_days[int(day) - 1]].append(employee)
-    
+                        
     return schedule
 
 if __name__ == "__main__":

@@ -61,7 +61,6 @@ class LoginWindow(QtWidgets.QWidget):
     def register(self):
         self.parent().setCurrentIndex(1)
 
-
 class RegisterWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -133,13 +132,14 @@ class FunctionSelectionWindow(QtWidgets.QWidget):
         self.setLayout(layout)
 
 class RankingWindow(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
 
         layout = QtWidgets.QVBoxLayout()
+        self.main_window = main_window
 
         self.status_label = QtWidgets.QLabel('正在生成排名表...')
-        self.ok_button = QtWidgets.QPushButton('确定')
+        self.ok_button = QtWidgets.QPushButton('回到功能选择')
         self.ok_button.hide()
 
         layout.addWidget(self.status_label)
@@ -147,7 +147,7 @@ class RankingWindow(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
-        self.ok_button.clicked.connect(QtWidgets.qApp.quit)
+        self.ok_button.clicked.connect(self.on_back_button_clicked)
 
     def generate_ranking(self):
         try:
@@ -204,12 +204,17 @@ class RankingWindow(QtWidgets.QWidget):
             self.status_label.setText(f"生成排名表时出现错误：{str(e)}")
             print(f"生成排名表时出现错误：{str(e)}")
 
+    def on_back_button_clicked(self):
+        # 返回功能选择页面
+        self.main_window.switch_to_function_selection_window()
+
 class ScheduleWindow(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
+        self.main_window = main_window
 
         # 创建文本编辑框并添加到布局中
         self.text_edit = QtWidgets.QTextEdit()
@@ -219,6 +224,11 @@ class ScheduleWindow(QtWidgets.QWidget):
         self.generate_button = QtWidgets.QPushButton('等待生成')
         self.generate_button.setEnabled(False)  # 初始状态设为不可按
         layout.addWidget(self.generate_button)
+
+        # 添加返回按钮
+        self.back_button = QtWidgets.QPushButton('返回')
+        self.back_button.clicked.connect(self.on_back_button_clicked)
+        layout.addWidget(self.back_button)
 
         # 将布局设置为窗口的布局
         self.setLayout(layout)
@@ -240,11 +250,17 @@ class ScheduleWindow(QtWidgets.QWidget):
         processed_text = word_processing.parse_schedule_text(input_text, "照片")  # 假设 word_processing.py 有一个叫做 process 的函数
         return processed_text
     
+    def on_back_button_clicked(self):
+        # 返回功能选择页面
+        self.main_window.switch_to_function_selection_window()
+
+    
 class EmployeePhotoWindow(QtWidgets.QWidget):
-    def __init__(self, employees):
+    def __init__(self, employees, main_window):
         super().__init__()
 
         self.employees = employees
+        self.main_window = main_window
         self.init_ui()
 
     def init_ui(self):
@@ -266,15 +282,19 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         self.generate_pic_btn.clicked.connect(self.on_generate_pic_clicked)
         layout.addWidget(self.generate_pic_btn)
 
-        self.confirm_btn = QtWidgets.QPushButton("确认")
-        self.confirm_btn.clicked.connect(self.on_confirm_clicked)
+        self.confirm_btn = QtWidgets.QPushButton("回到功能选择")
+        self.confirm_btn.clicked.connect(self.on_back_button_clicked)
         layout.addWidget(self.confirm_btn)
         self.confirm_btn.hide()
 
         self.setLayout(layout)
 
+    def on_back_button_clicked(self):
+        # 返回功能选择页面
+        self.main_window.switch_to_function_selection_window()
+
     def create_employee_roster(self):
-        avatars_folder = "./照片"
+        avatars_folder = "员工展示"
         roster_filename = "女仆名册.txt"
 
         # 检查文件是否存在，如果不存在则创建
@@ -316,6 +336,16 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
                 employees_by_ranking[ranking] = []
             employees_by_ranking[ranking].append(employee)
 
+        # 将 R 级别的员工放在 A 级别和 S 级别之间
+        if 'R' in employees_by_ranking:
+            R_ranking_employees = employees_by_ranking.pop('R')
+            new_employee_ranking = {}
+            for ranking, employees in employees_by_ranking.items():
+                if ranking == 'A':
+                    new_employee_ranking['R'] = R_ranking_employees
+                new_employee_ranking[ranking] = employees
+            employees_by_ranking = new_employee_ranking
+
         return employees_by_ranking
 
     def generate_show_pic(self):
@@ -327,19 +357,28 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         self.confirm_btn.show()
 
     def on_generate_pic_clicked(self):
-        print("Generate button clicked, checking rankings...")
-        employees_without_rankings = self.check_employee_rankings()
+        print("Generate button clicked, checking info...")
+        employees_without_rankings, employees_without_photos = self.check_employee_rankings()
+        
+        error_message = ""
         if employees_without_rankings:
-            print(f"Employees without rankings found: {', '.join(employees_without_rankings)}")
-            self.text_prompt.setText("以下员工没有被分级：\n" + "\n".join(employees_without_rankings))
-            return
+            print(f"Employees without rankings: {', '.join(employees_without_rankings)}")
+            error_message += "以下员工没有被分级：\n" + "\n".join(employees_without_rankings) + "\n"
 
-        print("All employees have rankings, generating picture...")
-        self.generate_show_pic()
+        if employees_without_photos:
+            print(f"Employees without photos in roster: {', '.join(employees_without_photos)}")
+            error_message += "以下员工在名册中但没有照片：\n" + "\n".join(employees_without_photos) + "\n"
+
+        if error_message:
+            self.text_prompt.setText(error_message.strip())
+        else:
+            print("All employees have info, generating picture...")
+            self.generate_show_pic()
+
 
     def check_employee_rankings(self):
         roster_filename = "女仆名册.txt"
-        avatars_folder = "./照片"
+        avatars_folder = "员工展示"
 
         # 从名册文件中获取已经分级的员工
         ranked_employees = self.read_employee_roster(roster_filename).keys()
@@ -354,21 +393,22 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         employees_without_rankings = [employee for employee in all_employees if employee not in ranked_employees]
         print(f"Employees without rankings: {', '.join(employees_without_rankings)}")
 
-        return employees_without_rankings
-    
-    def on_confirm_clicked(self):
-        print("Confirm button clicked, closing application...")
-        QtWidgets.qApp.quit()
+        # 查找已经分级但没有照片的员工
+        employees_without_photos = [employee for employee in ranked_employees if employee not in all_employees]
+        print(f"Employees without photos: {', '.join(employees_without_photos)}")
+
+        return employees_without_rankings, employees_without_photos
     
 class GenerateScheduleWindow(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, main_window):
         super().__init__()
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
+        self.main_window = main_window
 
         self.status_label = QtWidgets.QLabel('正在生成排班表...')
-        self.ok_button = QtWidgets.QPushButton('确定')
+        self.ok_button = QtWidgets.QPushButton('返回功能选择')
         self.ok_button.hide()
 
         # 将控件添加到布局中
@@ -379,7 +419,11 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         self.setLayout(layout)
 
         # 连接信号和槽
-        self.ok_button.clicked.connect(QtWidgets.qApp.quit)
+        self.ok_button.clicked.connect(self.on_back_button_clicked)
+
+    def on_back_button_clicked(self):
+        # 返回功能选择页面
+        self.main_window.switch_to_function_selection_window()
 
     def generation_finished(self):
         self.status_label.setText('排班表生成完毕')
@@ -424,18 +468,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.register_window = RegisterWindow()
         self.week_days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
-        avatars_folder = "./照片"
+        avatars_folder = "照片"
         image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp"}
         self.employees = [os.path.splitext(filename)[0] for filename in os.listdir(avatars_folder) if os.path.splitext(filename)[1].lower() in image_extensions]
 
         # 创建 ScheduleWindow 并传递员工列表
-        self.schedule_window = ScheduleWindow()
+        self.schedule_window = ScheduleWindow(self)
         self.show_schedule_window()
 
-        self.generate_schedule_window = GenerateScheduleWindow()
+        self.generate_schedule_window = GenerateScheduleWindow(self)
         self.function_selection_window = FunctionSelectionWindow()
-        self.ranking_window = RankingWindow()
-        self.employee_photo_window = EmployeePhotoWindow(self.employees)
+        self.ranking_window = RankingWindow(self)
+        self.employee_photo_window = EmployeePhotoWindow(self.employees, self)
 
         # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
@@ -499,6 +543,10 @@ class MainWindow(QtWidgets.QMainWindow):
             employee_checkboxes = self.schedule_window.get_employee_checkboxes_for_week_day(week_day)
             selected_employees = [employee.text() for employee in employee_checkboxes if employee.isChecked()]
             update_schedule(user_id, week_day, selected_employees)
+
+    def switch_to_function_selection_window(self):
+        # 假设功能选择页面的索引是0
+        self.stack.setCurrentIndex(4)
 
 if __name__ == '__main__':
     init_database()
