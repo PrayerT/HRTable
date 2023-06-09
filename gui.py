@@ -150,59 +150,60 @@ class RankingWindow(QtWidgets.QWidget):
         self.ok_button.clicked.connect(self.on_back_button_clicked)
 
     def generate_ranking(self):
-        try:
-            # 指定表格文件夹路径
-            folder_path = '表格'
+        # try:
+        # 指定表格文件夹路径
+        folder_path = '表格'
 
-            # 获取表格文件夹下所有文件的文件名（包含后缀）
-            file_names = os.listdir(folder_path)
+        # 获取表格文件夹下所有文件的文件名（包含后缀）
+        file_names = os.listdir(folder_path)
 
-            # 过滤出所有以 .xlsx 结尾的文件名，并将它们按照修改时间排序
-            xlsx_files = [f for f in file_names if f.endswith('.xlsx')]
-            xlsx_files.sort(key=lambda f: os.path.getmtime(os.path.join(folder_path, f)), reverse=True)
+        # 过滤出所有以 .xlsx 结尾的文件名，并将它们按照修改时间排序
+        # 过滤出所有以 .xlsx 结尾，且不以 '~$' 开头的文件名，并将它们按照修改时间排序
+        xlsx_files = [f for f in file_names if f.endswith('.xlsx') and not f.startswith('~$')]
+        xlsx_files.sort(key=lambda f: os.path.getmtime(os.path.join(folder_path, f)), reverse=True)
 
-            if not xlsx_files:
-                self.status_label.setText("表格文件夹下不存在任何表格文件！")
-                return
+        if not xlsx_files:
+            self.status_label.setText("表格文件夹下不存在任何表格文件！")
+            return
 
-            # 打开 Excel 文件
-            workbook = openpyxl.load_workbook(os.path.join(folder_path, xlsx_files[0]))
+        # 打开 Excel 文件
+        workbook = openpyxl.load_workbook(os.path.join(folder_path, xlsx_files[0]))
 
-            # 选择工作表
-            worksheet = workbook.active
-            data = []
-            for row in worksheet.iter_rows(min_row=2, max_col=2):
-                employee_name = row[0].value
-                if employee_name is None:
-                    continue
-                quantity = row[1].value
-                # total_price = row[2].value
-                data.append((employee_name, quantity))
-                print(employee_name, quantity)
+        # 选择工作表
+        worksheet = workbook.active
+        data = []
+        for row in worksheet.iter_rows(min_row=2, max_col=2):
+            employee_name = row[0].value
+            if employee_name is None:
+                continue
+            quantity = row[1].value
+            # total_price = row[2].value
+            data.append((employee_name, quantity))
+            print(employee_name, quantity)
 
-            # 按总价降序排序
-            data.sort(key=lambda x: x[1], reverse=True)
+        # 按总价降序排序
+        data.sort(key=lambda x: x[1], reverse=True)
 
-            rank = data[:10]
-            print(rank)
+        rank = data[:10]
+        print(rank)
 
-            basename, extension = os.path.splitext(xlsx_files[0])
-            month_string, remaining = basename.split("月", 1)
-            month = month_string[-2:] + "月"
-            rank_image = generate_rank_image(rank, month)
-            if not os.path.exists("./桃花榜"):
-                os.makedirs("./桃花榜")
+        basename, extension = os.path.splitext(xlsx_files[0])
+        month_string, remaining = basename.split("月", 1)
+        month = month_string[-2:] + "月"
+        rank_image = generate_rank_image(rank, month)
+        if not os.path.exists("./桃花榜"):
+            os.makedirs("./桃花榜")
 
-            output_path = os.path.join("./桃花榜", month + "桃花榜.png")
-            rank_image.save(output_path)
-            # 在这里添加将头像合成排名表的代码
+        output_path = os.path.join("./桃花榜", month + "桃花榜.png")
+        rank_image.save(output_path)
+        # 在这里添加将头像合成排名表的代码
 
-            self.status_label.setText("排名表生成完毕")
-            self.ok_button.show()
+        self.status_label.setText("排名表生成完毕")
+        self.ok_button.show()
 
-        except Exception as e:
-            self.status_label.setText(f"生成排名表时出现错误：{str(e)}")
-            print(f"生成排名表时出现错误：{str(e)}")
+        # except Exception as e:
+        #     self.status_label.setText(f"生成排名表时出现错误：{str(e)}")
+        #     print(f"生成排名表时出现错误：{str(e)}")
 
     def on_back_button_clicked(self):
         # 返回功能选择页面
