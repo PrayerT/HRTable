@@ -257,28 +257,20 @@ class ScheduleWindow(QtWidgets.QWidget):
 
     
 class EmployeePhotoWindow(QtWidgets.QWidget):
-    def __init__(self, employees, main_window):
+    def __init__(self, main_window):
         super().__init__()
 
-        self.employees = employees
         self.main_window = main_window
         self.init_ui()
 
     def init_ui(self):
         layout = QtWidgets.QVBoxLayout()
 
-        # 创建名册
-        self.create_employee_roster()
-
         # 文本提示
-        self.text_prompt = QtWidgets.QLabel("请检查名册，填写分级，如果检查全部正确，请点击生成图片按钮开始生成")
+        self.text_prompt = QtWidgets.QLabel("请检查分级，如果检查全部正确，请点击生成图片按钮开始生成")
         layout.addWidget(self.text_prompt)
 
         # 按钮
-        self.open_roster_btn = QtWidgets.QPushButton("打开名册")
-        self.open_roster_btn.clicked.connect(self.open_employee_roster)
-        layout.addWidget(self.open_roster_btn)
-
         self.generate_pic_btn = QtWidgets.QPushButton("生成图片")
         self.generate_pic_btn.clicked.connect(self.on_generate_pic_clicked)
         layout.addWidget(self.generate_pic_btn)
@@ -291,51 +283,25 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         self.setLayout(layout)
 
     def on_back_button_clicked(self):
+        self.reset_window()
         # 返回功能选择页面
         self.main_window.switch_to_function_selection_window()
 
-    def create_employee_roster(self):
-        avatars_folder = "员工展示"
-        roster_filename = "女仆名册.txt"
-
-        # 检查文件是否存在，如果不存在则创建
-        if not os.path.exists(roster_filename):
-            with open(roster_filename, "w", encoding="utf-8") as roster_file:
-                for employee in self.employees:
-                    roster_file.write(f"{employee}:\n")
-        else:
-            print(f"文件 {roster_filename} 已存在，不会覆盖编辑过的内容。")
-
-    def open_employee_roster(self):
-        roster_filename = "女仆名册.txt"
-        if sys.platform.startswith('darwin'):
-            subprocess.call(('open', roster_filename))
-        elif os.name == 'nt':
-            os.startfile(roster_filename)
-        elif os.name == 'posix':
-            subprocess.call(('xdg-open', roster_filename))
-        else:
-            print("未知操作系统，无法自动打开文件。请手动打开：", roster_filename)
-
-
-    def read_employee_roster(self,roster_filename):
-        employee_rankings = {}
-        with open(roster_filename, "r", encoding="utf-8") as roster_file:
-            for line in roster_file:
-                employee, ranking = line.strip().split(":")
-                employee_rankings[employee] = ranking
-
-        return employee_rankings
-
-    def prepare_employee_data(self):
-        roster_filename = "女仆名册.txt"
-        employee_rankings = self.read_employee_roster(roster_filename)
+    def get_employee_data_from_folders(self):
+        base_folder = "助教"
+        rankings = ['A级', 'R级', 'S级']
 
         employees_by_ranking = {}
-        for employee, ranking in employee_rankings.items():
-            if ranking not in employees_by_ranking:
-                employees_by_ranking[ranking] = []
-            employees_by_ranking[ranking].append(employee)
+        for ranking in rankings:
+            ranking_folder = os.path.join(base_folder, ranking)
+            if os.path.exists(ranking_folder):
+                employees = [f.replace('.jpg', '') for f in os.listdir(ranking_folder) if f.endswith('.jpg')]
+                employees_by_ranking[ranking] = employees
+
+        return employees_by_ranking
+
+    def prepare_employee_data(self):
+        employees_by_ranking = self.get_employee_data_from_folders()
 
         # 将 R 级别的员工放在 A 级别和 S 级别之间
         if 'R' in employees_by_ranking:
@@ -353,53 +319,17 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         employees_by_ranking = self.prepare_employee_data()
         generate_show_image(employees_by_ranking)
         self.text_prompt.setText("图片生成完成")
-        self.open_roster_btn.hide()
         self.generate_pic_btn.hide()
         self.confirm_btn.show()
 
     def on_generate_pic_clicked(self):
-        print("Generate button clicked, checking info...")
-        employees_without_rankings, employees_without_photos = self.check_employee_rankings()
+        self.generate_show_pic()
+
+    def reset_window(self):
+        self.text_prompt.setText("请检查分级，如果检查全部正确，请点击生成图片按钮开始生成")
+        self.generate_pic_btn.show()
+        self.confirm_btn.hide()
         
-        error_message = ""
-        if employees_without_rankings:
-            print(f"Employees without rankings: {', '.join(employees_without_rankings)}")
-            error_message += "以下员工没有被分级：\n" + "\n".join(employees_without_rankings) + "\n"
-
-        if employees_without_photos:
-            print(f"Employees without photos in roster: {', '.join(employees_without_photos)}")
-            error_message += "以下员工在名册中但没有照片：\n" + "\n".join(employees_without_photos) + "\n"
-
-        if error_message:
-            self.text_prompt.setText(error_message.strip())
-        else:
-            print("All employees have info, generating picture...")
-            self.generate_show_pic()
-
-
-    def check_employee_rankings(self):
-        roster_filename = "女仆名册.txt"
-        avatars_folder = "员工展示"
-
-        # 从名册文件中获取已经分级的员工
-        ranked_employees = self.read_employee_roster(roster_filename).keys()
-        print(f"Ranked employees: {', '.join(ranked_employees)}")
-
-        # 从照片文件夹获取所有员工
-        all_employees = [f.replace('.jpg', '').replace('.jpeg', '') 
-                        for f in os.listdir(avatars_folder) if f.endswith('.jpg') or f.endswith('.jpeg')]
-        print(f"All employees: {', '.join(all_employees)}")
-
-        # 查找没有分级的员工
-        employees_without_rankings = [employee for employee in all_employees if employee not in ranked_employees]
-        print(f"Employees without rankings: {', '.join(employees_without_rankings)}")
-
-        # 查找已经分级但没有照片的员工
-        employees_without_photos = [employee for employee in ranked_employees if employee not in all_employees]
-        print(f"Employees without photos: {', '.join(employees_without_photos)}")
-
-        return employees_without_rankings, employees_without_photos
-    
 class GenerateScheduleWindow(QtWidgets.QWidget):
     def __init__(self, main_window):
         super().__init__()
@@ -423,10 +353,18 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         self.ok_button.clicked.connect(self.on_back_button_clicked)
 
     def on_back_button_clicked(self):
+        self.reset_window()
         # 返回功能选择页面
         self.main_window.switch_to_function_selection_window()
 
-    def generation_finished(self):
+    
+    def reset_window(self):
+        # 重置状态标签和确认按钮
+        self.status_label.setText('正在生成排班表...')
+        self.ok_button.hide()
+
+    def generation_finished(self, image_path):
+        self.setImage(image_path)
         self.status_label.setText('排班表生成完毕')
         self.ok_button.show()
 
@@ -439,8 +377,7 @@ class GenerateScheduleWindow(QtWidgets.QWidget):
         output_path = f"排班表/{current_time}.png"
         schedule_image.save(output_path)
 
-        # 调用generation_finished方法，更新状态并显示ok_button
-        self.generation_finished()
+        return output_path
 
     def setImage(self, image_path):
         self.image_path = image_path
@@ -480,7 +417,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.generate_schedule_window = GenerateScheduleWindow(self)
         self.function_selection_window = FunctionSelectionWindow()
         self.ranking_window = RankingWindow(self)
-        self.employee_photo_window = EmployeePhotoWindow(self.employees, self)
+        self.employee_photo_window = EmployeePhotoWindow(self)
 
         # 将窗口添加到堆栈部件中
         self.stack.addWidget(self.login_window)
@@ -519,9 +456,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 创建新线程用于处理耗时操作
         self.generate_schedule_thread = GenerateScheduleThread(self.generate_schedule_window.generate_schedule_image, processed_schedule)
-        self.generate_schedule_thread.generation_finished.connect(self.on_generation_finished)
+        self.generate_schedule_thread.generation_finished.connect(self.generate_schedule_window.generation_finished)
         self.generate_schedule_thread.start()
-        
+
     def show_function_selection_window(self):
         self.stack.setCurrentIndex(4)
 

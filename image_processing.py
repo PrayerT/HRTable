@@ -610,13 +610,14 @@ def generate_show_image(employees_by_ranking):
     # 计算员工照片高度并更新画布高度
     for ranking, employees in employees_by_ranking.items():
         rows = math.ceil(len(employees) / max_images_per_row)
-        image_path = os.path.join("员工展示", f"{employees[0]}.jpg")
+        image_path = os.path.join("助教", f"{ranking}", f"{employees[0]}.jpg")
         if not os.path.exists(image_path):
-            image_path = os.path.join("员工展示", f"{employees[0]}.jpeg")
+            image_path = os.path.join("助教", f"{ranking}", f"{employees[0]}.jpeg")
         employee_image = Image.open(image_path)
         ranking_size = draw.textsize(ranking, font=ranking_font)
         name_size = draw.textsize(employees[0], font=name_font)  # 假设所有员工姓名的高度相同
         canvas_height += rows * (employee_image.height * image_width // employee_image.width + ranking_size[1] + name_size[1] + margin * 5)
+
 
     # 此时我们知道了画布的大小，所以我们可以创建画布
     canvas = Image.new('RGBA', (canvas_width, canvas_height), (255, 255, 255, 255))
@@ -655,7 +656,7 @@ def generate_show_image(employees_by_ranking):
         global_y += margin
         ranking_size = draw.textsize(ranking, font=ranking_font)
         ranking_position = ((canvas_width - ranking_size[0]) // 2, global_y - ranking_size[1] // 2)
-        ranking_text = str.upper(ranking) + "级"
+        ranking_text = ranking
         draw.text(ranking_position, ranking_text, font=ranking_font, fill=text_color)  # 绘制等级
         global_y += ranking_size[1] + margin * 2
 
@@ -664,12 +665,13 @@ def generate_show_image(employees_by_ranking):
         employee_images = []
 
         for employee in employees:
-            image_path = os.path.join("员工展示", f"{employee}.jpg")
+            image_path = os.path.join("助教", f"{ranking}", f"{employee}.jpg")
             if not os.path.exists(image_path):
-                image_path = os.path.join("员工展示", f"{employee}.jpeg")
+                image_path = os.path.join("助教", f"{ranking}", f"{employee}.jpeg")
             name_size = draw.textsize(employee, font=name_font)
             max_name_height = max(max_name_height, name_size[1])
             employee_images.append((employee, image_path))
+
 
         for employee, image_path in employee_images:
             global_x, employee_image = draw_employee(canvas, draw, employee, image_path, name_font, global_x, global_y, margin, canvas_width)
