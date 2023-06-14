@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 import matplotlib.font_manager as fm
 from datetime import datetime
 import random
+import shutil
 
 from database import get_image_mtime, save_image_mtime
 
@@ -87,8 +88,7 @@ def rotate_text(image_pil, text, angle, target_size):
 
     return image_pil
 
-def process_all_images(input_folder, input_folder_raw, output_folder, output_folder_raw):
-    target_size = (1024, 1024)  # All images will be resized to this size
+def process_all_images(input_folder, input_folder_raw, output_folder, output_folder_raw, force_update):
 
     if not os.path.exists('头像'):
         os.mkdir('头像')
@@ -99,6 +99,36 @@ def process_all_images(input_folder, input_folder_raw, output_folder, output_fol
     if not os.path.exists('照片改'):
         os.mkdir('照片改')
 
+    assistant_folder = '助教'
+    target_size = (1024, 1024)  # All images will be resized to this size
+
+    # Check for changes in the '助教' folder
+    assistant_images = []
+    for root, dirs, files in os.walk(assistant_folder):
+        for file in files:
+            if file.startswith('.'):
+                continue  # Skip hidden files like .DS_Store
+            assistant_image_path = os.path.join(root, file)
+            destination_image_path = os.path.join(input_folder, file)
+            assistant_images.append(file)
+            # Check if the image is already present in the '照片' folder
+            if os.path.exists(destination_image_path):
+                # If it's present, we need to check if it's been modified
+                if os.path.getmtime(assistant_image_path) != os.path.getmtime(destination_image_path):
+                    # The image has been modified, so we overwrite it
+                    shutil.copy2(assistant_image_path, destination_image_path)
+                    print(f"已更新图片： {file}")
+            else:
+                # The image is new, so we simply copy it
+                shutil.copy2(assistant_image_path, destination_image_path)
+                print(f"已添加新图片： {file}")
+
+    # Check for deletions in the '照片' folder
+    for image in os.listdir(input_folder):
+        if image not in assistant_images:
+            os.remove(os.path.join(input_folder, image))
+            print(f"已删除图片： {image}")
+
     # 在这里实现批量处理图片功能
     for image_name in os.listdir(input_folder):
         if image_name.startswith('.'):
@@ -108,9 +138,10 @@ def process_all_images(input_folder, input_folder_raw, output_folder, output_fol
         image_mtime = os.path.getmtime(image_path)
 
         saved_mtime = get_image_mtime(image_name)
-        if saved_mtime is not None and saved_mtime == image_mtime:
-            print(f"跳过已处理且未更改的图片： {image_name}")
-            continue
+        if not force_update:
+            if saved_mtime is not None and saved_mtime == image_mtime:
+                print(f"跳过已处理且未更改的图片： {image_name}")
+                continue
 
         image_pil = Image.open(image_path)
 
@@ -118,35 +149,44 @@ def process_all_images(input_folder, input_folder_raw, output_folder, output_fol
             print(f"无法加载图片: {image_name}")
             continue
 
-        face = detect_face(image_pil)
         aspect_ratio = image_pil.width / image_pil.height
 
-        if face is not None:
-            print(f"人脸识别成功： {image_name}")
-            face_center = (face[0] + face[2] // 2, face[1] + face[3] // 2)
-            max_distance = min(face_center[0], face_center[1], image_pil.width - face_center[0], image_pil.height - face_center[1])
+        # 创建一个空列表用于存储处理失败的员工名字
+        failed_employees = []
+
+        # 首先，在每个图片处理之初，检查"照片改"文件夹中是否存在与当前图片同名的图片
+        matching_images = [filename for filename in os.listdir(input_folder_raw) if os.path.splitext(filename)[0] == os.path.splitext(image_name)[0]]
+        if len(matching_images) > 0:
+            modified_image_name = matching_images[0]
+            modified_image_path = os.path.join(input_folder_raw, modified_image_name)
+            modified_image_pil = Image.open(modified_image_path)
+            aspect_ratio = modified_image_pil.width / modified_image_pil.height
+            # 检查该图片是否是1:1的比例，如果是，直接采用
+            if aspect_ratio == 1:
+                face_center = (int(modified_image_pil.width / 2), int(modified_image_pil.height / 2))
+                max_distance = min(face_center[0], face_center[1], modified_image_pil.width - face_center[0], modified_image_pil.height - face_center[1])
+                image_pil = modified_image_pil
+            else:
+                print(f"照片改中的文件宽高比不为1:1： {image_name}")
         else:
-            matching_images = [filename for filename in os.listdir(input_folder_raw) if os.path.splitext(filename)[0] == os.path.splitext(image_name)[0]]
-            if len(matching_images) > 0:
-                print(f"使用照片改中的文件： {image_name}")
-                modified_image_name = matching_images[0]
-                modified_image_path = os.path.join(input_folder_raw, modified_image_name)
-                modified_image_pil = Image.open(modified_image_path)
-                aspect_ratio = modified_image_pil.width / modified_image_pil.height
-                if aspect_ratio == 1:
-                    face_center = (int(modified_image_pil.width / 2), int(modified_image_pil.height / 2))
-                    max_distance = min(face_center[0], face_center[1], modified_image_pil.width - face_center[0], modified_image_pil.height - face_center[1])
-                    image_pil = modified_image_pil
-                else:
-                    print(f"照片改中的文件宽高比不为1:1： {image_name}")
-                    continue
+            # 如果"照片改"文件夹中没有同名图片，或者同名图片的长宽比不是1:1，那么进行人脸识别
+            face = detect_face(image_pil)
+            if face is not None:
+                print(f"人脸识别成功： {image_name}")
+                face_center = (face[0] + face[2] // 2, face[1] + face[3] // 2)
+                max_distance = min(face_center[0], face_center[1], image_pil.width - face_center[0], image_pil.height - face_center[1])
             else:
                 print(f"人脸识别失败，请手动截取人脸： {image_name}")
+                failed_employees.append(os.path.splitext(image_name)[0])
                 continue
 
-        cropped_face_pil = crop_face(image_pil, face_center, max_distance, image_name)
+        if failed_employees:
+            print("处理失败的员工：", ', '.join(failed_employees))
 
         name = os.path.splitext(image_name)[0]
+
+        cropped_face_pil = crop_face(image_pil, face_center, max_distance, name)
+
         named_image_pil = rotate_text(cropped_face_pil, name, -30, target_size)
 
         output_path = os.path.join(output_folder, f"{name}头像.png")
@@ -159,15 +199,20 @@ def process_all_images(input_folder, input_folder_raw, output_folder, output_fol
 def remove_deleted_images(input_folder, output_folder, output_folder_raw):
     input_images = {os.path.splitext(image_name)[0] for image_name in os.listdir(input_folder)}
     output_images = {os.path.splitext(image_name)[0].rstrip('头像') for image_name in os.listdir(output_folder)}
-    # output_images_raw = {os.path.splitext(image_name)[0].rstrip('原头像') for image_name in os.listdir(output_folder_raw)}
+    output_images_raw = {os.path.splitext(image_name)[0].rstrip('原头像') for image_name in os.listdir(output_folder_raw)}
+
 
     for name in output_images - input_images:
+        if name.startswith('.'):
+            continue
         output_image_path = os.path.join(output_folder, f"{name}头像.png")
         print(f"删除了：{output_images}")
         os.remove(output_image_path)
-    # for name in output_images_raw - input_images:
-    #     output_image_path = os.path.join(output_folder, f"{name}原头像.png")
-    #     os.remove(output_image_path)
+    for name in output_images_raw - input_images:
+        if name.startswith('.'):
+            continue
+        output_image_path = os.path.join(output_folder_raw, f"{name}原头像.png")
+        os.remove(output_image_path)
 
 def create_employee_rectangle(employees, max_employees, avatar_size=100, avatar_padding=10):
     rect_width = max_employees * (avatar_size + avatar_padding) + avatar_padding

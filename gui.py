@@ -45,7 +45,7 @@ class LoginWindow(QtWidgets.QWidget):
         self.password_input.returnPressed.connect(self.login)
 
     def login(self):
-        DEBUG = True
+        DEBUG = False
         username = self.username_input.text()
         password = self.password_input.text()
         if DEBUG:
@@ -64,7 +64,7 @@ class LoginWindow(QtWidgets.QWidget):
 class RegisterWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        process_all_images("./照片", "./照片改","./头像","./原头像")
+        process_all_images("./照片", "./照片改","./头像","./原头像", False)
 
         # 创建布局和控件
         layout = QtWidgets.QVBoxLayout()
@@ -124,12 +124,45 @@ class FunctionSelectionWindow(QtWidgets.QWidget):
         self.schedule_button = QtWidgets.QPushButton("排班表生成")
         self.ranking_button = QtWidgets.QPushButton("排名表生成")
         self.show_employee_photos_button = QtWidgets.QPushButton('生成员工展示图')
-        
+        self.generate_avatars_button = QtWidgets.QPushButton('头像有误，重新生成')
+
         layout.addWidget(self.schedule_button)
         layout.addWidget(self.ranking_button)
         layout.addWidget(self.show_employee_photos_button)
+        layout.addWidget(self.generate_avatars_button)
+
+        self.avatar_processing_thread = AvatarProcessingThread()
+        self.avatar_processing_thread.processingStarted.connect(self.on_avatar_processing_started)
+        self.avatar_processing_thread.processingFinished.connect(self.on_avatar_processing_finished)
+        self.generate_avatars_button.clicked.connect(self.on_generate_avatars_button_clicked)
 
         self.setLayout(layout)
+
+    def on_avatar_processing_started(self):
+        self.schedule_button.setEnabled(False)
+        self.ranking_button.setEnabled(False)
+        self.show_employee_photos_button.setEnabled(False)
+        self.generate_avatars_button.setEnabled(False)
+
+    def on_avatar_processing_finished(self):
+        self.schedule_button.setEnabled(True)
+        self.ranking_button.setEnabled(True)
+        self.show_employee_photos_button.setEnabled(True)
+        self.generate_avatars_button.setEnabled(True)
+        self.generate_avatars_button.setText("处理完毕，点击再次处理")
+
+    def on_generate_avatars_button_clicked(self):
+        self.generate_avatars_button.setText("正在处理……")
+        self.avatar_processing_thread.start()
+
+class AvatarProcessingThread(QThread):
+    processingStarted = pyqtSignal()
+    processingFinished = pyqtSignal()
+
+    def run(self):
+        self.processingStarted.emit()
+        process_all_images("./照片", "./照片改","./头像","./原头像", True)
+        self.processingFinished.emit()
 
 class RankingWindow(QtWidgets.QWidget):
     def __init__(self, main_window):
@@ -248,13 +281,12 @@ class ScheduleWindow(QtWidgets.QWidget):
     def process_input(self):
         # 处理文本输入
         input_text = self.text_edit.toPlainText()
-        processed_text = word_processing.parse_schedule_text(input_text, "照片")  # 假设 word_processing.py 有一个叫做 process 的函数
+        processed_text = word_processing.parse_schedule_text(input_text, "照片")
         return processed_text
     
     def on_back_button_clicked(self):
         # 返回功能选择页面
         self.main_window.switch_to_function_selection_window()
-
     
 class EmployeePhotoWindow(QtWidgets.QWidget):
     def __init__(self, main_window):
@@ -267,7 +299,7 @@ class EmployeePhotoWindow(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout()
 
         # 文本提示
-        self.text_prompt = QtWidgets.QLabel("请检查分级，如果检查全部正确，请点击生成图片按钮开始生成")
+        self.text_prompt = QtWidgets.QLabel("请检查压缩包是否正确，如果检查全部正确，请点击生成图片按钮开始生成")
         layout.addWidget(self.text_prompt)
 
         # 按钮
@@ -439,6 +471,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.function_selection_window.schedule_button.clicked.connect(self.show_schedule_window)
         self.function_selection_window.ranking_button.clicked.connect(self.show_ranking_window)
         self.function_selection_window.show_employee_photos_button.clicked.connect(self.show_employee_photo_window)
+        self.function_selection_window.generate_avatars_button.clicked.connect(
+            self.function_selection_window.on_generate_avatars_button_clicked)
+
 
     def show_login_window(self):
         self.stack.setCurrentIndex(0)
